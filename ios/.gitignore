@@ -1,0 +1,15 @@
+*.xcodeproj
+.DS_Store
+DerivedData/
+
+# XcodeGen が project.yml から生成する（`info: path: Sources/Info.plist`）。
+# 追跡すると、關係者向けビルドで project.yml に BUNGO_API_KEY を入れた際、
+# 共有シークレットが「追跡濟みファイルの通常の變更」として現れ、
+# `git commit -a` で公開リポジトリに入る經路になる。CI は毎回 xcodegen を
+# 走らせるので、追跡から外してもビルドには影響しない。
+Sources/Info.plist
+
+# ローカル実機ビルドの中間生成物（ios/build-device.sh）
+build-device/
+build-device.log
+.build/

@@ -1,0 +1,52 @@
+name: Yatate
+options:
+  bundleIdPrefix: com.bungo
+  deploymentTarget: { iOS: "16.0" }
+settings:
+  base: { MARKETING_VERSION: "1.0", CURRENT_PROJECT_VERSION: "1", GENERATE_INFOPLIST_FILE: NO }
+packages:
+  YatateCore:
+    path: YatateCore
+targets:
+  Yatate:
+    type: application
+    platform: iOS
+    sources: [Sources]
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        PRODUCT_BUNDLE_IDENTIFIER: com.bungo.Yatate
+    dependencies:
+      - target: YatateKeyboard   # 拡張を .app に同梱（app-extension は既定で embed）
+      - package: YatateCore
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: 矢立
+        # GENERATE_INFOPLIST_FILE=NO ゆゑ Xcode が自動付与しない。
+        # 無いと App Store が ITMS-90713 で弾く。
+        CFBundleIconName: AppIcon
+        UILaunchScreen: {}
+  # 矢立 — 文語 IME キーボード拡張。通信せず、フルアクセスも要求しない。
+  YatateKeyboard:
+    type: app-extension
+    platform: iOS
+    sources: [YatateKeyboard]
+    dependencies:
+      - package: YatateCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bungo.Yatate.Keyboard
+    info:
+      path: YatateKeyboard/Info.plist
+      properties:
+        CFBundleDisplayName: 矢立
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.keyboard-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
+          NSExtensionAttributes:
+            IsASCIICapable: false
+            PrefersRightToLeft: false
+            PrimaryLanguage: ja-JP
+            # 通信しないので不要。許可の有無で挙動は変はらない。
+            RequestsOpenAccess: false

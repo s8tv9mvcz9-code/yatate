@@ -1,0 +1,159 @@
+name: iOS Release (App Store)
+# タグ push（v* ）で App Store Connect まで自動で上げる。人間のログインは初回の
+# 鍵づくりだけで、以後は無人。
+#
+# 必要な Secrets（`scripts/setup-asc-secrets.sh` が一括で登録する）:
+#   ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_P8_BASE64  … App Store Connect API キー
+#   IOS_DIST_CERT_P12_BASE64 / IOS_DIST_CERT_PASSWORD … 配布証明書（Apple Distribution）
+#   IOS_TEAM_ID                                     … 証明書 subject の OU
+#
+# 署名は「自動」だが Xcode に人間のアカウントは要らない。`-allowProvisioningUpdates` へ
+# API キーを渡すと、プロビジョニングプロファイルを CI が自分で発行・更新する。
+# 配布証明書だけは秘密鍵ごと持ち込む必要があるため .p12 で渡す（毎回 CI が新規発行すると
+# アカウントの証明書枠をすぐ使ひ切るため）。
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      skip_upload:
+        description: "アップロードせずビルド検証だけ行ふ"
+        type: boolean
+        default: false
+concurrency:
+  group: ios-release
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  release:
+    runs-on: macos-14
+    timeout-minutes: 60
+    env:
+      TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select latest available Xcode
+        run: |
+          LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          sudo xcode-select -s "$LATEST/Contents/Developer"
+          xcodebuild -version
+
+      - run: brew install xcodegen
+
+      # 配布証明書を使ひ捨てのキーチェーンへ入れる。ランナーは毎回廃棄されるが、
+      # 既定キーチェーンを汚さないやう専用のものを作る。
+      - name: 配布証明書を取り込む
+        env:
+          P12: ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
+          P12_PASS: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN=$RUNNER_TEMP/build.keychain
+          KEYCHAIN_PASS=$(uuidgen)
+          security create-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN"
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          security import "$RUNNER_TEMP/dist.p12" -k "$KEYCHAIN" -P "$P12_PASS" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          # codesign が実行時に確認ダイアログを出さないやうにする（CI には人が居ない）
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASS" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/dist.p12"
+          echo "取り込んだ署名 ID:"
+          security find-identity -v -p codesigning "$KEYCHAIN" | grep -c "Apple Distribution" \
+            || { echo "::error::Apple Distribution 証明書が見つかりません"; exit 1; }
+
+      # altool は鍵を `AuthKey_<KEY_ID>.p8` といふ名で探す（API_PRIVATE_KEYS_DIR 配下）。
+      # 名前が違ふと「鍵が見つからない」で落ちるので、この命名は必須。
+      - name: App Store Connect API キーを配置
+        env:
+          P8: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/asc"
+          echo "$P8" | base64 --decode > "$RUNNER_TEMP/asc/AuthKey_${KEY_ID}.p8"
+          chmod 600 "$RUNNER_TEMP/asc/AuthKey_${KEY_ID}.p8"
+
+      # ビルド番号は App Store 内で一意でなければならない（重複はアップロード拒否）。
+      # run_number は単調増加するので、これをそのまま使ふ。
+      # Info.plist は xcodegen が project.yml の値から literal で書き出すため、
+      # generate の**前**に差し替へる必要がある。
+      - name: ビルド番号を採番して project.yml へ
+        run: |
+          set -euo pipefail
+          BUILD=${{ github.run_number }}
+          sed -i '' "s/CURRENT_PROJECT_VERSION: \"[^\"]*\"/CURRENT_PROJECT_VERSION: \"$BUILD\"/" ios/project.yml
+          grep -o 'CURRENT_PROJECT_VERSION: "[^"]*"' ios/project.yml
+          echo "BUILD_NUMBER=$BUILD" >> "$GITHUB_ENV"
+
+      - name: プロジェクト生成
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: アーカイブ（配布署名・プロファイルは API キーで自動発行）
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -project Yatate.xcodeproj -scheme Yatate \
+            -destination 'generic/platform=iOS' -configuration Release \
+            -archivePath "$RUNNER_TEMP/Yatate.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey_${{ secrets.ASC_KEY_ID }}.p8" \
+            -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}" \
+            DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic
+
+      - name: App Store 用に書き出し
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>uploadSymbols</key><true/>
+            <key>destination</key><string>export</string>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Yatate.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey_${{ secrets.ASC_KEY_ID }}.p8" \
+            -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}"
+          ls -la "$RUNNER_TEMP/export"
+
+      # 提出前の機械検証。アイコン欠落・Info.plist 不備などはここで落ちる。
+      - name: 検証（App Store の受け入れ条件）
+        run: |
+          set -euo pipefail
+          xcrun altool --validate-app -f "$RUNNER_TEMP/export/Yatate.ipa" -t ios \
+            --apiKey "${{ secrets.ASC_KEY_ID }}" --apiIssuer "${{ secrets.ASC_ISSUER_ID }}"
+        env:
+          API_PRIVATE_KEYS_DIR: ${{ runner.temp }}/asc
+
+      - name: アップロード
+        if: github.event_name == 'push' || inputs.skip_upload != true
+        run: |
+          set -euo pipefail
+          xcrun altool --upload-app -f "$RUNNER_TEMP/export/Yatate.ipa" -t ios \
+            --apiKey "${{ secrets.ASC_KEY_ID }}" --apiIssuer "${{ secrets.ASC_ISSUER_ID }}"
+          echo "✓ build $BUILD_NUMBER を App Store Connect へ送りました。"
+          echo "  審査提出は App Store Connect の画面で行つてください（TestFlight は使ひません）。"
+        env:
+          API_PRIVATE_KEYS_DIR: ${{ runner.temp }}/asc
+
+      - name: 後片付け（鍵とキーチェーンを消す）
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/asc"
+          security delete-keychain "$RUNNER_TEMP/build.keychain" 2>/dev/null || true

@@ -1,0 +1,56 @@
+name: iOS CI
+# ⚠ paths を ios/** だけに狭めないこと。core ジョブの鮮度ゲートは
+# 「ssot/kyuji.py を変へたのに Generated/*.swift が古いまま」を捕まへる関門で、
+# 引き金に SSOT 側と生成スクリプトを含めないとゲートが素通りになる。
+on:
+  push:
+    paths: ["ios/**", "ssot/**", "scripts/gen_swift_tables.py", ".github/workflows/ios-ci.yml"]
+  pull_request:
+    paths: ["ios/**", "ssot/**", "scripts/gen_swift_tables.py", ".github/workflows/ios-ci.yml"]
+concurrency:
+  group: ios-ci-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  core:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select latest available Xcode
+        run: |
+          LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          sudo xcode-select -s "$LATEST/Contents/Developer"
+      - name: swift test（YatateCore）
+        working-directory: ios/YatateCore
+        run: swift test
+      - name: Python 側の SSOT テスト
+        run: python3 ssot/test_kyuji.py
+      # 生成物の鮮度ゲート — Python が SSOT、Swift は機械が写したもの。
+      # KanaBigram は青空文庫への通信が要る（数分）ので CI では回さない。
+      - name: 生成物が SSOT と同期してゐるか
+        run: |
+          python3 scripts/gen_swift_tables.py
+          if ! git diff --exit-code -- ios/YatateCore/Sources/YatateCore/Generated/; then
+            echo "::error::Generated/*.swift が ssot/kyuji.py と食ひ違つてゐます。"
+            echo "::error::python3 scripts/gen_swift_tables.py を実行して結果をコミットしてください。"
+            exit 1
+          fi
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select latest available Xcode
+        run: |
+          LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          sudo xcode-select -s "$LATEST/Contents/Developer"
+      - run: brew install xcodegen
+      - working-directory: ios
+        run: xcodegen generate
+      - working-directory: ios
+        run: >
+          xcodebuild build
+          -project Yatate.xcodeproj -scheme Yatate
+          -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          CODE_SIGNING_ALLOWED=NO
