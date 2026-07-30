@@ -29,6 +29,18 @@ targets:
         # 無いと App Store が ITMS-90713 で弾く。
         CFBundleIconName: AppIcon
         UILaunchScreen: {}
+        # 未宣言だと App Store が弾く（Invalid bundle. No orientations were specified）。
+        # 文机は横でも使へるので四方向すべて許す。
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
   # 矢立 — 文語 IME キーボード拡張。通信せず、フルアクセスも要求しない。
   YatateKeyboard:
     type: app-extension

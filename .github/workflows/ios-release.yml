@@ -27,18 +27,29 @@ permissions:
   contents: read
 jobs:
   release:
-    runs-on: macos-14
+    runs-on: macos-latest
     timeout-minutes: 60
     env:
       TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select latest available Xcode
+      # App Store は **iOS 26 SDK 以降**でのビルドを要求する（それ以前だと
+      # アップロード時に SDK version issue で弾かれる）。ここで満たせなければ
+      # 後段で長々ビルドしてから落ちるので、先に明示して止める。
+      - name: Xcode を選び、SDK が要件を満たすか確かめる
         run: |
+          set -euo pipefail
+          ls -d /Applications/Xcode*.app 2>/dev/null || true
           LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
-          sudo xcode-select -s "$LATEST/Contents/Developer"
+          [ -n "$LATEST" ] && sudo xcode-select -s "$LATEST/Contents/Developer"
           xcodebuild -version
+          SDK=$(xcodebuild -showsdks | grep -oE 'iphoneos[0-9]+' | grep -oE '[0-9]+' | sort -n | tail -1)
+          echo "iOS SDK: $SDK"
+          if [ "${SDK:-0}" -lt 26 ]; then
+            echo "::error::iOS SDK $SDK は App Store の要件（26 以降）を満たしません。ランナー像を更新してください。"
+            exit 1
+          fi
 
       - run: brew install xcodegen
 
