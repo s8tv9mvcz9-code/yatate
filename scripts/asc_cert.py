@@ -15,6 +15,9 @@ from __future__ import annotations
 
 import base64
 import json
+import os
+import subprocess
+import tempfile
 import sys
 import time
 import urllib.request
@@ -22,7 +25,6 @@ import urllib.request
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa, utils as asym_utils
-from cryptography.hazmat.primitives.serialization import pkcs12
 from cryptography.x509.oid import NameOID
 
 API = "https://api.appstoreconnect.apple.com/v1"
@@ -103,13 +105,33 @@ def main() -> None:
     print(f"✓ 発行: {attrs.get('displayName')} / 期限 {attrs.get('expirationDate')}")
     print(f"  subject: {cert.subject.rfc4514_string()}")
 
-    blob = pkcs12.serialize_key_and_certificates(
-        name=b"Yatate CI Distribution", key=key, cert=cert, cas=None,
-        encryption_algorithm=serialization.BestAvailableEncryption(p12_pass.encode()),
-    )
-    with open(out_p12, "wb") as f:
-        f.write(blob)
-    print(f"✓ .p12 を書き出しました: {out_p12}")
+    # macOS の `security import` は **旧方式の PKCS#12**（3DES + SHA1 MAC）しか
+    # 受け付けない。cryptography が既定で使ふ PBES2/AES で束ねると
+    # 「MAC verification failed」で弾かれる（実際に CI で踏んだ）。
+    # よつて PEM を経由し、openssl に旧方式で束ねさせる。
+    with tempfile.TemporaryDirectory() as td:
+        key_pem = os.path.join(td, "key.pem")
+        cert_pem = os.path.join(td, "cert.pem")
+        with open(key_pem, "wb") as f:
+            f.write(key.private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.PKCS8,
+                serialization.NoEncryption()))
+        with open(cert_pem, "wb") as f:
+            f.write(cert.public_bytes(serialization.Encoding.PEM))
+        cmd = ["openssl", "pkcs12", "-export",
+               "-inkey", key_pem, "-in", cert_pem,
+               "-out", out_p12, "-name", "Yatate CI Distribution",
+               "-passout", "pass:" + p12_pass,
+               "-keypbe", "PBE-SHA1-3DES", "-certpbe", "PBE-SHA1-3DES",
+               "-macalg", "sha1"]
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode != 0:
+            # OpenSSL 3 系では旧方式に -legacy プロバイダが要る
+            r = subprocess.run(cmd + ["-legacy"], capture_output=True, text=True)
+            if r.returncode != 0:
+                raise SystemExit("✗ .p12 の作成に失敗:\n" + r.stderr[:400])
+    print(f"✓ .p12 を書き出しました（旧方式・macOS が取り込める形）: {out_p12}")
 
 
 if __name__ == "__main__":
