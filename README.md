@@ -73,3 +73,16 @@ docs/ime/           設計一式
 
 [MIT](LICENSE)。コーパスは青空文庫の著作権保護期間満了作品——
 帰属と第三者ソフトウェアの扱ひは [NOTICE](NOTICE.md)、免責は [DISCLAIMER](DISCLAIMER.md)。
+
+## リリース
+
+タグを打つだけで App Store Connect まで無人で上がる:
+
+```bash
+git tag v1.0.1 && git push origin v1.0.1
+```
+
+`.github/workflows/ios-release.yml` が署名・検証・アップロードまで行ふ。
+審査への提出だけは App Store Connect の画面で押す（TestFlight は使はない）。
+初回の仕込みは `scripts/setup-asc-secrets.sh`（App Store Connect API キーを
+一度だけ用意すれば、以後の人手は不要）。
