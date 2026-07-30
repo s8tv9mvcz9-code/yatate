@@ -14,8 +14,8 @@
 #   ./scripts/setup-asc-secrets.sh ~/Downloads/AuthKey_XXXXXXXXXX.p8 <KEY_ID> <ISSUER_ID>
 #
 # このスクリプトは順に:
-#   ・API キーで配布証明書（Apple Distribution）を発行させる（無ければ作られる）
-#   ・その証明書を .p12 に書き出す
+#   ・API キーで配布証明書（Apple Distribution）を発行する（秘密鍵はこちらで生成）
+#   ・鍵と証明書を .p12 に束ねる
 #   ・GitHub Secrets へ 6 つ登録する（値は表示しない）
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -36,52 +36,13 @@ echo "▶ Team ID: $TEAM"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 KEYDIR="$TMP/asc"; mkdir -p "$KEYDIR"; cp "$P8" "$KEYDIR/key.p8"; chmod 600 "$KEYDIR/key.p8"
 
-# ── 1. 配布証明書を用意させる ───────────────────────────
-# App Store 向けの書き出しには「Apple Distribution」が要る。ローカルに無ければ
-# API キー経由で発行される（CI で毎回作らせると証明書枠を使ひ切るので、ここで一度だけ）。
-if security find-identity -v -p codesigning 2>/dev/null | grep -q "Apple Distribution"; then
-  echo "▶ 配布証明書は既にあります"
-else
-  echo "▶ 配布証明書が無いので API キーで発行させます（アーカイブを一回流します）"
-  (cd ios && xcodegen generate >/dev/null)
-  xcodebuild archive -project ios/Yatate.xcodeproj -scheme Yatate \
-    -destination 'generic/platform=iOS' -configuration Release \
-    -archivePath "$TMP/a.xcarchive" \
-    -allowProvisioningUpdates \
-    -authenticationKeyPath "$KEYDIR/key.p8" \
-    -authenticationKeyID "$KEY_ID" -authenticationKeyIssuerID "$ISSUER_ID" \
-    DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic > "$TMP/archive.log" 2>&1 \
-    || { echo "✗ アーカイブ失敗:"; grep -E "error:" "$TMP/archive.log" | sort -u | head -5; exit 1; }
-
-  cat > "$TMP/eo.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>method</key><string>app-store-connect</string>
-  <key>teamID</key><string>$TEAM</string>
-  <key>destination</key><string>export</string>
-</dict></plist>
-PLIST
-  xcodebuild -exportArchive -archivePath "$TMP/a.xcarchive" \
-    -exportOptionsPlist "$TMP/eo.plist" -exportPath "$TMP/export" \
-    -allowProvisioningUpdates \
-    -authenticationKeyPath "$KEYDIR/key.p8" \
-    -authenticationKeyID "$KEY_ID" -authenticationKeyIssuerID "$ISSUER_ID" \
-    > "$TMP/export.log" 2>&1 \
-    || { echo "✗ 書き出し失敗:"; grep -E "error:" "$TMP/export.log" | sort -u | head -5; exit 1; }
-
-  security find-identity -v -p codesigning | grep -q "Apple Distribution" \
-    || { echo "✗ 配布証明書が作られませんでした。API キーの権限が App Manager か確認を。"; exit 1; }
-  echo "✓ 配布証明書を発行しました"
-fi
-
-# ── 2. .p12 に書き出す ────────────────────────────────
-# 注: security export は指定キーチェーン内の identity をまとめて出すため、
-# 開発用証明書も同梱され得る。いづれも本人の証明書であり、CI は署名にしか使はない。
+# ── 1〜2. 配布証明書を発行し .p12 に束ねる ───────────────
+# Xcode が作る証明書はデータ保護キーチェーンに入り `security export` で取り出せない
+# （秘密鍵が出ないので .p12 を作れない）。よつて秘密鍵はこちらで生成し、CSR を
+# App Store Connect API に投げて証明書を受け取る。鍵と証明書が揃ふので CI へ渡せる。
 P12_PASS=$(uuidgen)
-security export -t identities -f pkcs12 -P "$P12_PASS" -o "$TMP/dist.p12" 2>/dev/null \
-  || { echo "✗ .p12 の書き出しに失敗（キーチェーンのロック解除が要るかもしれません）"; exit 1; }
-echo "✓ 配布証明書を .p12 へ書き出しました"
+python3 scripts/asc_cert.py "$KEY_ID" "$ISSUER_ID" "$KEYDIR/key.p8" "$TMP/dist.p12" "$P12_PASS" \
+  || { echo "✗ 配布証明書の発行に失敗しました"; exit 1; }
 
 # ── 3. GitHub Secrets へ登録（値は表示しない）──────────────
 echo "▶ GitHub Secrets を登録します"
