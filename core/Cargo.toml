@@ -1,0 +1,29 @@
+[package]
+name = "yatate-core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "矢立の決定的核 — 全 OS の殻が共有する純関数群（docs/ime/cross-platform.md M5）"
+license = "MIT"
+repository = "https://github.com/s8tv9mvcz9-code/yatate"
+
+[lib]
+name = "yatate_core"
+# lib      … Rust の殻（Windows TSF）が直接使ふ
+# staticlib … iOS/macOS へ静的リンクする（ランタイムを持ち込まない）
+# cdylib   … Android(JNI)・Linux の殻が読む
+crate-type = ["lib", "staticlib", "cdylib"]
+
+# 依存ゼロ。決定的核に依存を入れると「$0・LLM 不要・資格情報不要」で
+# テストできる性質が壊れる（docs/ime/cross-platform.md §5）。
+[dependencies]
+
+# 黄金ベクトル（JSON）を読むためだけの開発時依存。配布物には入らない。
+[dev-dependencies]
+serde_json = "1"
+
+[profile.release]
+opt-level = "z"      # キーボード拡張のメモリ予算を優先（速度より大きさ）
+lto = true
+strip = true
+panic = "abort"

@@ -1,0 +1,70 @@
+name: Core CI
+# 決定的核（core/・Rust）の検証と、SSOT からの生成物の鮮度ゲート。
+#
+# **ubuntu で回す**（課金 1 倍）。核の正しさは OS に依らないので、macOS ランナー
+# （10 倍）を使ふ理由が無い。macOS が要るのは「殻がビルドできるか」だけで、
+# それは ios-ci.yml の仕事である（docs/ime/cross-platform.md §7）。
+#
+# ⚠ paths を core/** だけに狭めないこと。鮮度ゲートは
+# 「ssot/kyuji.py を変へたのに core/src/generated/ が古いまま」を捕まへる関門で、
+# 引き金に SSOT 側と生成スクリプトを含めないとゲートが素通りになる
+# （ios-ci.yml が同じ注意書きを持つてゐる）。
+on:
+  push:
+    paths:
+      - "core/**"
+      - "ssot/**"
+      - "scripts/gen_rust_tables.py"
+      - "scripts/gen_parity_vectors.py"
+      - ".github/workflows/core-ci.yml"
+  pull_request:
+    paths:
+      - "core/**"
+      - "ssot/**"
+      - "scripts/gen_rust_tables.py"
+      - "scripts/gen_parity_vectors.py"
+      - ".github/workflows/core-ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: core-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Python SSOT のテスト（依存ゼロ）
+        run: python3 ssot/test_kyuji.py
+
+      - name: Rust ツールチェーン
+        run: rustup toolchain install stable --profile minimal --component rustfmt clippy
+
+      - name: cargo test（単体 ＋ 黄金ベクトル）
+        working-directory: core
+        run: cargo test --all-targets
+
+      - name: cargo clippy（警告をエラーにする）
+        working-directory: core
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: cargo fmt の検査
+        working-directory: core
+        run: cargo fmt --check
+
+      # 生成物の鮮度ゲート — Python が SSOT、Rust の表と黄金ベクトルは機械が写したもの。
+      # 再生成して差分が出たら「SSOT を変へたのに写しが古い」といふこと。
+      - name: 生成物の鮮度（表・黄金ベクトル）
+        run: |
+          python3 scripts/gen_rust_tables.py
+          python3 scripts/gen_parity_vectors.py
+          git diff --exit-code -- core/src/generated core/vectors

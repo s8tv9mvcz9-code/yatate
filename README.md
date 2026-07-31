@@ -49,23 +49,34 @@ cd ios/YatateCore && swift test  # 決定的核の検証（シミュレータ不
 cd ios && ./build-device.sh      # 実機へ署名ビルド＋導入
 ```
 
-機械生成物は Python が SSOT で、Swift は写し。SSOT を変へたら再生成する
+**共有核（`core/`・Rust）** — macOS・Windows・Android へ広げるための一つの核。
+Mac は要らず ubuntu で回る（[設計](docs/ime/cross-platform.md)）:
+
+```bash
+cd core && cargo test            # 単体 ＋ 黄金ベクトル（Python SSOT との一致）
+```
+
+機械生成物は Python が SSOT で、Swift と Rust は写し。SSOT を変へたら再生成する
 （CI が鮮度を検査して、写しが古いままなら落とす）:
 
 ```bash
-python3 scripts/gen_swift_tables.py   # ssot/kyuji.py → Generated/KyujiTable.swift
-python3 scripts/gen_yatate_ngram.py   # 青空文庫      → Generated/KanaBigram.swift
+python3 scripts/gen_swift_tables.py     # ssot/kyuji.py → Generated/KyujiTable.swift
+python3 scripts/gen_rust_tables.py      # ssot/kyuji.py → core/src/generated/kyuji_table.rs
+python3 scripts/gen_parity_vectors.py   # ssot/kyuji.py → core/vectors/kyuji.json（黄金ベクトル）
+python3 scripts/gen_yatate_ngram.py     # 青空文庫      → Generated/KanaBigram.swift
 ```
 
 ## 構成
 
 ```
+core/               共有核（Rust・依存ゼロ）。全 OS の殻が使ふ決定的な部分
+                    ＋ vectors/（黄金ベクトル＝Python SSOT との一致を縛る表）
 ios/
   Sources/          ホストアプリ（有効化の案内・文机）。通信コードは無い
-  YatateCore/       決定的核（行×段の地図・旧字変換・墨の氣配）。アプリと拡張が共有
+  YatateCore/       iOS の決定的核（行×段の地図・旧字変換・墨の氣配）。アプリと拡張が共有
   YatateKeyboard/   キーボード拡張（com.apple.keyboard-service）
-ssot/               新字体→旧字体 248 字の対応表（Swift 側の生成元）
-scripts/            テーブル生成・アイコン生成・リリース仕込み
+ssot/               新字体→旧字体 248 字の対応表（Swift・Rust 双方の生成元）
+scripts/            テーブル生成・黄金ベクトル生成・アイコン生成・リリース仕込み
 docs/ime/           設計一式
 ```
 
