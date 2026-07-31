@@ -14,6 +14,7 @@
 | [vla.md](./vla.md) | VLA 層 — 鍵盤を行為空間として見る。方策の可視化「墨の気配」「筆脈」、拡散条件付けとしての情緒「滲み」、A0（コーパス n-gram）〜A2（軌跡復号）の段階 |
 | [fuzukue.md](./fuzukue.md) | 文机モード — 大画面を五十音の紙面＝ステートマシンにする macOS 版の先行像（iOS フル画面でエミュレート）。マスが状態・運筆が遷移・連綿が語 |
 | [roadmap.md](./roadmap.md) | 工程 — M0〜M4 のマイルストーン、リスク、コスト見積り |
+| [cross-platform.md](./cross-platform.md) | 多platform展開 — macOS(IMKit)・Windows(TSF)・Android(IMS)。**殻は OS ごとに native、核は Rust 一本**。黄金ベクトル・CI 課金・配布署名・M5〜M9 |
 
 ## なぜ IME か
 
