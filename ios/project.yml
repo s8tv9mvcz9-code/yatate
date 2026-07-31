@@ -65,3 +65,26 @@ targets:
             PrimaryLanguage: ja-JP
             # 通信しないので不要。許可の有無で挙動は変はらない。
             RequestsOpenAccess: false
+  # 矢立 macOS — 文机の macOS 版（docs/ime/fuzukue.md §4 の先行像）。
+  # **FuzukueView と YatateCore は iOS 版と同一のソースを共有する**。
+  # macOS 固有なのは ../macos/YatateMacApp.swift だけ。
+  YatateMac:
+    type: application
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - path: ../macos
+      - path: Sources/View/FuzukueView.swift   # iOS 版と同じ実体を共有
+    dependencies:
+      - package: YatateCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bungo.Yatate.Mac
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ENABLE_HARDENED_RUNTIME: YES
+    info:
+      path: ../macos/Info.plist
+      properties:
+        CFBundleDisplayName: 矢立
+        LSMinimumSystemVersion: "13.0"
+        NSHumanReadableCopyright: "MIT License"

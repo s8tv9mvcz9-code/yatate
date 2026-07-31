@@ -13,8 +13,17 @@ struct FuzukueView: View {
     @State private var stroke: [CGPoint] = []
     @State private var currentCell: Cell? = nil
     @State private var lastCell: Cell? = nil     // 筆脈の起点（持ち上げ後も残る）
-    @State private var pending: Cell? = nil      // 進入確定の滞留ガード
+    @State private var pending: Cell? = nil      // 滞留を計つてゐる最中のマス
+    @State private var pendingSince: Date? = nil // そのマスに入つた時刻
+    @State private var strokeBegan = false       // 一筆が始まつてゐるか
     @Environment(\.colorScheme) private var scheme
+
+    /// 滞留の閾値。**回数でなく時間**で測る。
+    /// 当初はサンプル回数（同じマスを 2 回見たら確定）で代用してゐたが、これは指を
+    /// 前提にした代理指標で、ポインタでは逆転する——押下は 1 回しかイベントが出ないので
+    /// 始点が落ち、素早く通過したマスは 2 回出て書かれてしまふ（macOS 版で実測）。
+    /// 時間なら指でもポインタでも同じ意味になる。
+    private let dwell: TimeInterval = 0.09
 
     // 紙面の列: 右から左へ 十行 ＋ 左端の機能縁
     private static let gyos: [Gyo] = Gojuon.firstLine + Gojuon.secondLine
@@ -47,6 +56,8 @@ struct FuzukueView: View {
                 currentCell = nil
                 lastCell = nil
                 pending = nil
+                pendingSince = nil
+                strokeBegan = false
                 field = Kehai.field(after: nil)
             }
             .font(.subheadline)
@@ -114,28 +125,50 @@ struct FuzukueView: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { v in
-                        stroke.append(v.location)
-                        if stroke.count > 240 { stroke.removeFirst() }
-                        advance(to: cellAt(v.location, in: size))
+                        let first = !strokeBegan
+                        if first {
+                            strokeBegan = true
+                            stroke = [v.location]      // 前の一筆と繋げない
+                        } else {
+                            stroke.append(v.location)
+                            if stroke.count > 240 { stroke.removeFirst() }
+                        }
+                        advance(to: cellAt(v.location, in: size), at: v.time, first: first)
                     }
                     .onEnded { _ in                    // 持ち上げ＝切れ
                         currentCell = nil
                         pending = nil
+                        pendingSince = nil
+                        strokeBegan = false
                     }
             )
             verticalText
         }
     }
 
-    /// 進入確定の状態機械。滞留ガード: 同じマスで 2 サンプル目に確定する
-    ///（高速に通過しただけのマスを拾はない——fuzukue.md §2）。
-    private func advance(to cell: Cell?) {
+    /// 進入確定の状態機械（fuzukue.md §2）。
+    ///
+    /// ・**一筆の最初の一点は即座に書く** — そこに置いた指／ポインタに迷ひは無い。
+    /// ・**以後のマスは滞留してはじめて書く** — 通り過ぎただけのマスは拾はない。
+    private func advance(to cell: Cell?, at time: Date, first: Bool) {
         guard let cell, cell != currentCell else { return }
-        guard cell == pending else {                  // 1 サンプル目: 保留に積む
-            pending = cell
+        if first {
+            commit(cell)
             return
         }
-        pending = nil                                  // 2 サンプル目: 遷移が確定
+        guard cell == pending else {                  // 別のマスに入つた: 計測を始める
+            pending = cell
+            pendingSince = time
+            return
+        }
+        guard let since = pendingSince,
+              time.timeIntervalSince(since) >= dwell else { return }
+        commit(cell)
+    }
+
+    private func commit(_ cell: Cell) {
+        pending = nil
+        pendingSince = nil
         currentCell = cell
         lastCell = cell
         guard let k = kana(of: cell) else { return }
