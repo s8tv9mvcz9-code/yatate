@@ -93,9 +93,7 @@ impl Session {
             || ch == SHIFT
             || ch == DAKUTEN
             || ch == HANDAKUTEN
-            || crate::genki::FIRST_PLANE
-                .iter()
-                .any(|(k, _)| *k == ch)
+            || crate::genki::FIRST_PLANE.iter().any(|(k, _)| *k == ch)
     }
 
     /// 一字消す。未確定文字列が空になつたら `false`（殻は composition を閉ぢる）。
