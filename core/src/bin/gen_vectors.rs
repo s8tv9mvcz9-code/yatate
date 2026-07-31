@@ -17,6 +17,7 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::PathBuf;
 
+use yatate_core::genki::{self, type_keys};
 use yatate_core::gojuon::{self, Deflect};
 use yatate_core::kehai::{self, KeyId, MIN_EVIDENCE};
 
@@ -172,12 +173,75 @@ fn kehai_vectors() -> String {
     out
 }
 
+/// 原器（縦組五十音配列）— 面ごとの鍵→仮名と、打鍵列の例。
+fn genki_vectors() -> String {
+    let mut out = String::from(
+        "{\n \"_comment\": \"自動生成（cargo run --bin gen-vectors）— 手で編集しないこと。\
+核（core/src/genki.rs）がロジックの SSOT である。\",\n \"source\": \"core/src/genki.rs\",\n",
+    );
+    let _ = writeln!(
+        out,
+        " \"shift\": \"{}\", \"dakuten\": \"{}\", \"handakuten\": \"{}\",",
+        genki::SHIFT,
+        genki::DAKUTEN,
+        genki::HANDAKUTEN
+    );
+
+    for (name, plane) in [
+        ("first_plane", &genki::FIRST_PLANE[..]),
+        ("second_plane", &genki::SECOND_PLANE[..]),
+    ] {
+        let rows: Vec<String> = plane
+            .iter()
+            .map(|(k, kana)| {
+                format!(
+                    "  {{\"key\": \"{}\", \"kana\": \"{}\"}}",
+                    esc(&k.to_string()),
+                    esc(kana)
+                )
+            })
+            .collect();
+        let _ = write!(out, " \"{name}\": [\n{}\n ],\n", rows.join(",\n"));
+    }
+
+    // 打鍵列 → 仮名列（前置シフトの逐次性・後置濁点・^^＝ん を含む）
+    let seqs = [
+        "0987",
+        "0pj",
+        "5ta",
+        "^p^o^i^u^y",
+        "^t^r^e^w^q",
+        "^^",
+        "t^^",
+        "pb",
+        "gb",
+        "gv",
+        "0b",
+        "pv",
+        "udg^yo2^^ot^4",
+        "z/",
+    ];
+    let rows: Vec<String> = seqs
+        .iter()
+        .map(|k| {
+            format!(
+                "  {{\"keys\": \"{}\", \"kana\": \"{}\"}}",
+                esc(k),
+                esc(&type_keys(k))
+            )
+        })
+        .collect();
+    let _ = write!(out, " \"sequences\": [\n{}\n ]\n}}\n", rows.join(",\n"));
+    out
+}
+
 fn main() {
     let dir: PathBuf = [env!("CARGO_MANIFEST_DIR"), "vectors"].iter().collect();
     fs::create_dir_all(&dir).expect("vectors/ を作れない");
     for (name, body) in [
         ("gojuon.json", gojuon_vectors()),
         ("kehai.json", kehai_vectors()),
+        ("genki.json", genki_vectors()),
     ] {
         let path = dir.join(name);
         fs::write(&path, body).unwrap_or_else(|e| panic!("{}: {e}", path.display()));

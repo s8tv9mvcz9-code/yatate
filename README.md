@@ -75,6 +75,7 @@ cd core && cargo run --bin gen-vectors  # 核 → core/vectors/{gojuon,kehai}.js
 
 ```
 core/               共有核（Rust・依存ゼロ）。全 OS の殻が使ふ決定的な部分
+                    （旧字変換・五十音の地図・墨の氣配・原器の配列）
                     data/    仮名 bigram の元データ（Swift・Rust 双方の表の出所）
                     vectors/ 黄金ベクトル（表は Python が、ロジックは核が書く）
 ios/
