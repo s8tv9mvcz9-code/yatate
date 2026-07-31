@@ -4,7 +4,10 @@ gen_yatate_ngram.py — 青空文庫の仮名連 bigram から「墨の気配」
 
 docs/ime/vla.md の A0。旧字旧仮名テキストの本文からルビ・注記を除いた後に残る
 **ひらがなの連なり**（助詞・助動詞・送り仮名——文語の呼吸）を取り出し、
-仮名 bigram を数へ、Swift テーブル（Generated/KanaBigram.swift）に書き出す。
+仮名 bigram を数へ、**言語中立のデータ**（core/data/kana_bigram.txt）に書き出す。
+Swift と Rust の表はそこから scripts/gen_bigram_tables.py が起こす
+（別々に収穫すると青空文庫のカタログの変化で二つの表が静かにずれるため——
+docs/ime/cross-platform.md §6）。
 
 - 行頭記号 `^` は仮名連の開始（作業帯が空のとき・句読点の直後の分布）。
 - 遷移先には句読点 `、` `。` も含む（「なり」の後に文の終はる気配が見えるやうに）。
@@ -20,7 +23,9 @@ from __future__ import annotations
 import argparse
 import csv
 import io
+import os
 import re
+import sys
 import time
 import zipfile
 from collections import Counter, defaultdict
@@ -40,7 +45,7 @@ KANA_RUN = re.compile(r"[ぁ-ゖ]+")
 START = "^"
 PUNCT = "、。"
 
-OUT = "ios/YatateCore/Sources/YatateCore/Generated/KanaBigram.swift"
+OUT = "core/data/kana_bigram.txt"
 
 
 def load_catalog(max_books: int) -> list[dict]:
@@ -99,43 +104,26 @@ def count_bigrams(text: str, counts: dict[str, Counter]) -> None:
             counts[run[-1]][text[end]] += 1
 
 
-def emit_swift(counts: dict[str, Counter], books: int, chars: int,
-               top: int, min_count: int) -> str:
+def emit_data(counts: dict[str, Counter], books: int, chars: int,
+              top: int, min_count: int) -> str:
+    """言語中立のデータファイル本文（# 見出し ＋ 「前字>次字:度数,…」の行）。"""
     rows = []
     for prev in sorted(counts.keys()):
         items = [(k, v) for k, v in counts[prev].most_common(top) if v >= min_count]
         if not items:
             continue
         rows.append(prev + ">" + ",".join(f"{k}:{v}" for k, v in items))
-    packed = "\n".join(rows)
-    return f'''// 自動生成 — 手で編集しないこと。
-// SSOT: 青空文庫 旧字旧仮名 {books} 作品の仮名連（scripts/gen_yatate_ngram.py が生成）
-// 総文字数 {chars:,}・行形式「前字>次字:度数,…」・`^` は連なりの開始、、。 は終端遷移。
-
-public enum KanaBigram {{
-    static let packed = """
-{packed}
-"""
-
-    /// 前字 → [(次字, 度数)]（度数降順）。`"^"` は仮名連の開始分布。
-    public static let table: [String: [(next: Character, count: Int)]] = {{
-        var t: [String: [(Character, Int)]] = [:]
-        for line in packed.split(separator: "\\n") {{
-            guard let sep = line.firstIndex(of: ">") else {{ continue }}
-            let prev = String(line[..<sep])
-            var items: [(Character, Int)] = []
-            for pair in line[line.index(after: sep)...].split(separator: ",") {{
-                guard let colon = pair.firstIndex(of: ":"),
-                      let ch = pair[..<colon].first,
-                      let n = Int(pair[pair.index(after: colon)...]) else {{ continue }}
-                items.append((ch, n))
-            }}
-            t[prev] = items
-        }}
-        return t
-    }}()
-}}
-'''
+    head = (
+        "# 仮名連 bigram — 「墨の氣配」の元データ（言語中立）\n"
+        "#\n"
+        "# 青空文庫の旧字旧仮名作品から数へた仮名の連なり（docs/ime/vla.md A0）。\n"
+        "# ここが**唯一の出所**で、Swift と Rust の表は scripts/gen_bigram_tables.py が\n"
+        "# この一つのファイルから起こす（別々に収穫すると二つの表がずれる）。\n"
+        "#\n"
+        "# 形式: 「前字>次字:度数,…」度数降順。`^` は仮名連の開始、、。 は終端遷移。\n"
+        f"# meta: books={books} chars={chars} top={top} min_count={min_count}\n"
+    )
+    return head + "\n".join(rows) + "\n"
 
 
 def main() -> None:
@@ -158,11 +146,16 @@ def main() -> None:
         print(f"  [{fetched}] {book.get('作品名')}（{len(text):,} 字）")
         time.sleep(SLEEP_SEC)
 
-    swift = emit_swift(counts, fetched, total_chars, args.top, args.min_count)
+    data = emit_data(counts, fetched, total_chars, args.top, args.min_count)
     with open(OUT, "w", encoding="utf-8") as f:
-        f.write(swift)
+        f.write(data)
     n_rows = sum(1 for k in counts if counts[k])
     print(f"[out] {OUT}（前字 {n_rows} 種・{fetched} 作品・{total_chars:,} 字）")
+
+    # 同じ収穫から Swift と Rust の表を起こす（ここを分けると二つの表がずれる）
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import gen_bigram_tables  # noqa: E402
+    gen_bigram_tables.main()
 
 
 if __name__ == "__main__":

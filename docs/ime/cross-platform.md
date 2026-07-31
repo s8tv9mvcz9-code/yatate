@@ -7,12 +7,16 @@
 > そして矢立の価値はほぼ全部が核の側にある。だから「iOS だけ native」ではなく
 > **「全 OS の殻が native、核は一つ」** が正解になる。字面は違ふが、望んだ結果は満たす。
 
-> **実装状況（2026-07-31）**: **M5 の前半が入つた**。`core/`（Rust）が生まれ、
-> 旧字変換・五十音の地図・作業帯が Rust の核になり、Python SSOT から生成した
-> **黄金ベクトル**（`core/vectors/kyuji.json`）を `cargo test` が流してゐる。
+> **実装状況（2026-07-31）**: **M5-a が入つた**。`core/`（Rust）に旧字変換・五十音の地図・
+> 作業帯・**墨の氣配**・**原器（縦組五十音配列）**が揃ひ、黄金ベクトル 4 種
+> （`kyuji` / `gojuon` / `kehai` / `genki`）を
+> `cargo test` が流してゐる。仮名 bigram は Swift と Rust が**同じ一つのデータ**
+> （`core/data/kana_bigram.txt`）から起こされるやうになつた。
 > CI は ubuntu（課金 1 倍）で、生成物の鮮度ゲートつき（§6・§7・§10）。
-> 残るは Swift 側の載せ替へ（uniffi 束縛と `swift test` でのベクトル消費）で、
-> これは実機の Mac が要るため次の一歩とする。
+> **M7 の骨組みも入つた** — `windows/`（TSF 殻）が生まれ、OS を知らない頭脳
+> （`session`）は ubuntu で試験でき、COM の入口は
+> `cargo check --target x86_64-pc-windows-gnu` で型検査してゐる。
+> 残るは Mac が要る二つ——M5-b（iOS の載せ替へ）と M6（macOS 殻）。
 
 ## 1. 何が標準化できないのか — IME といふ部品の性質
 
@@ -98,6 +102,14 @@ graph TD
 | 楷・行・草 | タップ／行だけ／一筆書き | 打鍵数の差として自然に出る |
 | 文机モード | フル画面でエミュレート | **本来の姿**（[fuzukue.md](./fuzukue.md) は macOS を先行像として書かれてゐる） |
 
+!!! success "原器は核に入つた（2026-07-31）"
+    `core/src/genki.rs` に**縦組五十音配列そのもの**が実装された（`docs/ime/layout.md` §1、
+    本人確認済みの仕様）。前置シフトの逐次性・`^^`＝ん・後置の濁点/半濁点まで含み、
+    黄金ベクトル（`genki.json`）で縛つてある。
+    **macOS と Windows の殻は、これを呼ぶだけで原器が打てる**——
+    配列の実装を二度書かずに済む。
+    記号の配置と小書きは原器で未定なので、**核でも決めてゐない**（発明しない）。
+
 !!! important "macOS は「移植先」ではなく「原器の帰る場所」"
     iOS のキーボード拡張は**ハードキーイベントを受け取れない**（調査で確定済み・
     [roadmap.md](./roadmap.md) 遠景）。原器をそのまま物理キーボードで使へる経路は
@@ -125,6 +137,21 @@ graph TD
 | 候補 UI | TSF は候補ウィンドウを OS が出してくれない。**自前で描く**（DPI・マルチモニタ・UI-less mode 対応が要る） |
 | アーキテクチャ | x64 と **ARM64** の両方を出す（ARM64 機で x64 DLL は読み込まれない） |
 | 先行実装 | Microsoft の TSF サンプルを **Rust へ移植した `ime-rs`**、`windows-chewing-tsf`（Rust＋SignPath）——**Rust で TSF IME を書くのは実証済み**の道 |
+
+!!! success "骨組みは入つた（2026-07-31）"
+    `windows/` に TSF 殻の枠が出来た。切り方が肝で、
+
+    | module | OS 依存 | どこで守るか |
+    |---|---|---|
+    | `session` | **なし**（打鍵 → 未確定文字列の状態機械） | **ubuntu で `cargo test`** |
+    | `registration` | なし（CLSID・プロファイルの値） | 同上 |
+    | `tip` | Windows（`ITfTextInputProcessor`） | **ubuntu で `cargo check --target x86_64-pc-windows-gnu`** |
+
+    IME の頭脳は `session` に居り、そこは COM を知らない——**Windows 機が無くても
+    書けるし試験できる**。COM の入口も型検査までは Linux で守れる。
+    残る「クラスファクトリ・レジストリ書き込み・候補窓の描画・実機確認」は
+    Windows 機の上でしか詰められないので、**書かずに印だけ付けてある**
+    （書けば「動くやうに見えて動かないコード」が残るだけである）。
 
 ### Android（IMS）
 
@@ -219,11 +246,23 @@ yatate/docs/ime/*.md       ← 同じ 8 ファイル（現在、内容は同一�
 ```
 core/vectors/*.json        ← SSOT が生成する（入力 → 期待出力）
    ├─ kyuji.json    ✅済   旧字変換 248 字＋境界例（【ポイント】素通し・分割位置不変）
-   ├─ gojuon.json          行×段の座標と濁点・小書き
+   ├─ gojuon.json   ✅済   行×段×逸らしの全格子 150 通り＋逆引き 85 字
+   ├─ kehai.json    ✅済   bigram → 鍵ごとの墨・段の墨・筆脈の峰（12 例）
+   ├─ genki.json    ✅済   原器の両面（30＋20 鍵）と打鍵列の例（14 例）
    ├─ coverage.json        読みの被覆検査（一致・脱落・捏造・順序入替）
-   ├─ canon.json           正規化（畳む字・畳まない長音則）
-   └─ kehai.json           bigram → 鍵ごとの墨・筆脈の峰
+   └─ canon.json           正規化（畳む字・畳まない長音則）
 ```
+
+**SSOT は二種類あり、ベクトルを書く主体が違ふ。**
+
+| 何の | SSOT | ベクトルを書くのは | 従ふのは |
+|---|---|---|---|
+| **表**（旧字 248 字・仮名 bigram） | Python / データファイル | `scripts/gen_parity_vectors.py` | Rust・Swift・… |
+| **ロジック**（五十音の幾何・氣配の射影） | **核（Rust）** | `cargo run --bin gen-vectors` | Swift・Kotlin・C++ |
+
+表は元々 Python 側にあり、そこが唯一の出所であり続ける。
+一方ロジックは「全 OS の基準」であるべきなので核が持つ——
+だから `gojuon.json` / `kehai.json` は**核が書き、殻が従ふ**。
 
 `kyuji.json` は `scripts/gen_parity_vectors.py` が **`ssot/kyuji.py` を実行して**書き出す
 （248 字の全対応＋境界 10 例＋ストリーム 22 例）。**期待値は一行も手で書いてゐない。**
@@ -297,10 +336,11 @@ M0〜M4 は [roadmap.md](./roadmap.md) の通り（iOS）。本書はその先�
 
 | 段 | 内容 | 出口条件 |
 |---|---|---|
-| **M5-a 核の新設**（**済**） | `core/`（Rust・依存ゼロ）に旧字変換（`to_kyuji` / `to_kyuji_body` / `KyujiStream`）・五十音の地図・作業帯を実装。`gen_rust_tables.py` で表を生成し、`gen_parity_vectors.py` が **Python SSOT を実行して**黄金ベクトルを書き出す。`core-ci.yml`（ubuntu・鮮度ゲートつき） | ✅ `cargo test` 18 件 green・再生成で差分なし |
+| **M5-a 核の新設**（**済**） | `core/`（Rust・依存ゼロ）に旧字変換（`to_kyuji` / `to_kyuji_body` / `KyujiStream`）・五十音の地図・作業帯・**墨の氣配**を実装。表は `gen_rust_tables.py`（旧字）と `gen_bigram_tables.py`（仮名 bigram・Swift と共通のデータから）で生成。黄金ベクトルは Python（表）と核（ロジック）が書く。`core-ci.yml`（ubuntu・鮮度ゲートつき） | ✅ `cargo test` 26 件 green・再生成で差分なし |
 | **M5-b iOS の載せ替へ** | uniffi で Swift 束縛を生成し、`YatateCore` の手書き実装を核へ差し替へる。`swift test` が同じベクトルを流す | iOS の挙動が**ベクトル一致で不変**。`swift test` と `cargo test` が両方 green |
-| **M6 macOS** | IMKit 殻（Swift）＋原器の物理キーボード配列。Developer ID 署名＋notarize の配布経路 | 自分の Mac で常用でき、原器がそのまま打てる |
-| **M7 Windows** | TSF 殻（Rust）＋候補 UI 自前描画＋COM 登録インストーラ。x64/ARM64 | メモ帳・Word・Chrome で「けふはよきてんきなり」が変換できる |
+| **M6 macOS** | IMKit 殻（Swift）。**配列は核の `genki` を呼ぶだけ**（実装済み）。Developer ID 署名＋notarize の配布経路 | 自分の Mac で常用でき、原器がそのまま打てる |
+| **M7-a Windows の骨組み**（**済**） | `windows/` に TSF 殻の枠。`session`（OS 非依存の頭脳）＋ `registration`（登録の値）＋ `tip`（COM の入口）。ubuntu で test / clippy / fmt ＋ `--target x86_64-pc-windows-gnu` の型検査 | ✅ `cargo test` 11 件 green・Windows ターゲットで check 通過 |
+| **M7-b Windows の実装** | クラスファクトリ・DLL エクスポート・レジストリ登録・`ITfKeyEventSink`・`ITfComposition`・候補窓の自前描画。x64/ARM64、署名（OSS 枠） | メモ帳・Word・Chrome で「けふはよきてんきなり」が変換できる |
 | **M8 Android** | IMS 殻（Kotlin）＋uniffi Kotlin 束縛。二行配列は iOS の写し | iOS と同等の手数 |
 | **M9 同期** | 設定・辞書・学習の JSON スキーマと書き出し／読み込み | 端末を替へても稽古の蓄積が続く |
 

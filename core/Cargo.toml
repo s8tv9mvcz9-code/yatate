@@ -27,3 +27,8 @@ opt-level = "z"      # キーボード拡張のメモリ予算を優先（速度
 lto = true
 strip = true
 panic = "abort"
+
+# 黄金ベクトルの書き出し（ロジック側の SSOT は核なので、核が書く）
+[[bin]]
+name = "gen-vectors"
+path = "src/bin/gen_vectors.rs"

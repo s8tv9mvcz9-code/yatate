@@ -127,3 +127,150 @@ fn ストリームが分割位置に依らない() {
         );
     }
 }
+
+// ── ロジック側のベクトル（gojuon / kehai）────────────────────────
+// こちらは**核が SSOT**で、ファイルは核が書いたもの（`cargo run --bin gen-vectors`）。
+// ここでの検査は「committed のベクトルが古くなつてゐないか」を捕まへる番人である
+// （Swift・Kotlin の殻はこの同じファイルに従ふので、古いまま配ると全員が古くなる）。
+
+fn load(name: &str) -> Value {
+    let path: PathBuf = [env!("CARGO_MANIFEST_DIR"), "vectors", name]
+        .iter()
+        .collect();
+    let raw = fs::read_to_string(&path).unwrap_or_else(|e| {
+        panic!(
+            "ベクトルが読めない（{}）: {e}\n`cargo run --bin gen-vectors` で生成すること",
+            path.display()
+        )
+    });
+    serde_json::from_str(&raw).expect("ベクトルが JSON として壊れてゐる")
+}
+
+#[test]
+fn 五十音のベクトルが核と一致する() {
+    use yatate_core::gojuon::{self, Deflect};
+
+    let v = load("gojuon.json");
+    let kana = v["kana"].as_array().expect("kana");
+    assert_eq!(kana.len(), 150, "10 行 × 5 段 × 3 面 が揃つてゐない");
+
+    for case in kana {
+        let gyo = case["gyo"].as_str().expect("gyo");
+        let dan = case["dan"].as_u64().expect("dan") as usize;
+        let deflect = match case["deflect"].as_str().expect("deflect") {
+            "none" => Deflect::None,
+            "daku" => Deflect::Daku,
+            "ko" => Deflect::Ko,
+            other => panic!("未知の逸らし: {other}"),
+        };
+        let got = gojuon::gyo_named(gyo).expect("行が無い").kana(dan, deflect);
+        let want = case["kana"].as_str();
+        assert_eq!(got, want, "{gyo} {dan} 段 {:?}", case["deflect"]);
+    }
+
+    for case in v["reverse"].as_array().expect("reverse") {
+        let c = case["kana"].as_str().unwrap().chars().next().unwrap();
+        match gojuon::reverse_lookup(c) {
+            Some((gyo, dan)) => {
+                assert_eq!(Some(gyo), case["gyo"].as_str(), "{c} の逆引き行");
+                assert_eq!(
+                    dan as u64,
+                    case["dan"].as_u64().expect("dan"),
+                    "{c} の逆引き段"
+                );
+            }
+            None => assert!(case["gyo"].is_null(), "{c} は体系外のはず"),
+        }
+    }
+}
+
+#[test]
+fn 氣配のベクトルが核と一致する() {
+    use yatate_core::kehai::{self, KeyId, MIN_EVIDENCE};
+
+    let v = load("kehai.json");
+    assert_eq!(v["min_evidence"].as_u64(), Some(u64::from(MIN_EVIDENCE)));
+
+    let cases = v["cases"].as_array().expect("cases");
+    assert!(!cases.is_empty(), "cases が空（ゲートが無効化されてゐる）");
+
+    for case in cases {
+        let prev = case["prev"].as_str().map(|s| s.chars().next().unwrap());
+        let f = kehai::field(prev);
+        assert_eq!(
+            f.is_empty(),
+            case["empty"].as_bool().expect("empty"),
+            "{prev:?}"
+        );
+
+        let peak = case["peak"].as_object().map(|o| {
+            let id = o["id"].as_str().unwrap();
+            match o["kind"].as_str().unwrap() {
+                "gyo" => KeyId::Gyo(yatate_core::gojuon::gyo_named(id).expect("行が無い").name),
+                _ => KeyId::Moji(id.chars().next().unwrap()),
+            }
+        });
+        assert_eq!(f.peak, peak, "{prev:?} の峰");
+
+        for ink in case["ink"].as_array().expect("ink") {
+            let id = ink["key"]["id"].as_str().unwrap();
+            let key = match ink["key"]["kind"].as_str().unwrap() {
+                "gyo" => KeyId::Gyo(yatate_core::gojuon::gyo_named(id).expect("行").name),
+                _ => KeyId::Moji(id.chars().next().unwrap()),
+            };
+            let want = ink["ink"].as_f64().expect("ink 値");
+            assert!(
+                (f.ink_of(&key) - want).abs() < 1e-6,
+                "{prev:?} の {id} の墨: 核 {} ≠ ベクトル {want}",
+                f.ink_of(&key)
+            );
+        }
+    }
+}
+
+#[test]
+fn 原器のベクトルが核と一致する() {
+    use yatate_core::genki::{self, type_keys, Genki};
+
+    let v = load("genki.json");
+    assert_eq!(v["shift"].as_str(), Some(genki::SHIFT.to_string().as_str()));
+    assert_eq!(
+        v["dakuten"].as_str(),
+        Some(genki::DAKUTEN.to_string().as_str())
+    );
+
+    for (name, plane) in [
+        ("first_plane", &genki::FIRST_PLANE[..]),
+        ("second_plane", &genki::SECOND_PLANE[..]),
+    ] {
+        let arr = v[name]
+            .as_array()
+            .unwrap_or_else(|| panic!("{name} が無い"));
+        assert_eq!(arr.len(), plane.len(), "{name} の鍵数");
+        for case in arr {
+            let key = case["key"].as_str().unwrap().chars().next().unwrap();
+            let want = case["kana"].as_str().unwrap();
+            let mut g = Genki::new();
+            if name == "second_plane" {
+                g.press(genki::SHIFT, None);
+            }
+            match g.press(key, None) {
+                yatate_core::genki::Edit::Insert(got) => {
+                    assert_eq!(got, want, "{name} の {key}")
+                }
+                other => panic!("{name} の {key} が仮名を出さない: {other:?}"),
+            }
+        }
+    }
+
+    let seqs = v["sequences"].as_array().expect("sequences");
+    assert!(
+        !seqs.is_empty(),
+        "sequences が空（ゲートが無効化されてゐる）"
+    );
+    for case in seqs {
+        let keys = case["keys"].as_str().expect("keys");
+        let want = case["kana"].as_str().expect("kana");
+        assert_eq!(type_keys(keys), want, "打鍵列 {keys:?}");
+    }
+}

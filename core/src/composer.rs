@@ -31,6 +31,11 @@ impl Composer {
         self.text.pop();
     }
 
+    /// 捨てる（取り消し）。確定させずに空にする。
+    pub fn clear(&mut self) {
+        self.text.clear();
+    }
+
     /// 確定 — 旧字体を機械で確定させた文を返し、バッファを空にする。
     pub fn commit(&mut self) -> String {
         let out = to_kyuji(&self.text);

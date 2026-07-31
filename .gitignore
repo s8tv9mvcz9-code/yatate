@@ -8,5 +8,5 @@ __pycache__/
 # Claude Code のローカル設定（端末ごと）
 .claude/settings.local.json
 
-# Rust（決定的核）
-core/target/
+# Rust（核と殻。crate が増えても取り零さないやう名前で拾ふ）
+target/

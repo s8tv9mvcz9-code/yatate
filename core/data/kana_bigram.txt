@@ -1,10 +1,11 @@
-// 自動生成 — 手で編集しないこと。
-// SSOT: core/data/kana_bigram.txt（青空文庫 旧字旧仮名 23 作品の仮名連）
-// 総文字数 136,266・行形式「前字>次字:度数,…」・`^` は連なりの開始、、。 は終端遷移。
-// 生成: scripts/gen_bigram_tables.py（Rust 版と同じデータから起こす）
-
-public enum KanaBigram {
-    static let packed = """
+# 仮名連 bigram — 「墨の氣配」の元データ（言語中立）
+#
+# 青空文庫の旧字旧仮名作品から数へた仮名の連なり（docs/ime/vla.md A0）。
+# ここが**唯一の出所**で、Swift と Rust の表は scripts/gen_bigram_tables.py が
+# この一つのファイルから起こす（別々に収穫すると二つの表がずれる）。
+#
+# 形式: 「前字>次字:度数,…」度数降順。`^` は仮名連の開始、、。 は終端遷移。
+# meta: books=23 chars=136266 top=16 min_count=3
 ^>の:3837,に:2763,を:2544,は:1641,し:1357,が:1072,と:1015,で:841,つ:795,な:785,り:782,い:676,も:619,る:614,そ:606,か:569
 あ>る:360,つ:157,り:150,の:129,ら:80,た:51,れ:26,な:15,げ:14,ま:8,ち:7,が:6,は:5,ん:5,と:4,ふ:3
 い>ま:374,。:226,ふ:209,て:199,た:100,と:82,か:82,の:51,つ:50,、:46,や:37,い:30,ろ:28,も:27,で:23,が:19
@@ -75,23 +76,3 @@ public enum KanaBigram {
 ゑ>て:7
 を>し:84,、:75,つ:53,か:45,す:32,と:21,あ:20,も:14,さ:13,な:13,よ:13,や:9,ひ:9,た:8,の:7,く:7
 ん>で:132,。:117,と:104,な:65,だ:50,か:21,や:18,に:14,こ:12,の:9,も:8,た:7,が:7,は:6,ず:6,、:4
-"""
-
-    /// 前字 → [(次字, 度数)]（度数降順）。`"^"` は仮名連の開始分布。
-    public static let table: [String: [(next: Character, count: Int)]] = {
-        var t: [String: [(Character, Int)]] = [:]
-        for line in packed.split(separator: "\n") {
-            guard let sep = line.firstIndex(of: ">") else { continue }
-            let prev = String(line[..<sep])
-            var items: [(Character, Int)] = []
-            for pair in line[line.index(after: sep)...].split(separator: ",") {
-                guard let colon = pair.firstIndex(of: ":"),
-                      let ch = pair[..<colon].first,
-                      let n = Int(pair[pair.index(after: colon)...]) else { continue }
-                items.append((ch, n))
-            }
-            t[prev] = items
-        }
-        return t
-    }()
-}

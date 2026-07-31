@@ -54,6 +54,8 @@ Mac は要らず ubuntu で回る（[設計](docs/ime/cross-platform.md)）:
 
 ```bash
 cd core && cargo test            # 単体 ＋ 黄金ベクトル（Python SSOT との一致）
+cd windows && cargo test         # Windows 殻の頭脳（OS 非依存の部分）
+cd windows && cargo check --target x86_64-pc-windows-gnu   # COM の入口の型検査
 ```
 
 機械生成物は Python が SSOT で、Swift と Rust は写し。SSOT を変へたら再生成する
@@ -63,14 +65,22 @@ cd core && cargo test            # 単体 ＋ 黄金ベクトル（Python SSOT �
 python3 scripts/gen_swift_tables.py     # ssot/kyuji.py → Generated/KyujiTable.swift
 python3 scripts/gen_rust_tables.py      # ssot/kyuji.py → core/src/generated/kyuji_table.rs
 python3 scripts/gen_parity_vectors.py   # ssot/kyuji.py → core/vectors/kyuji.json（黄金ベクトル）
-python3 scripts/gen_yatate_ngram.py     # 青空文庫      → Generated/KanaBigram.swift
+python3 scripts/gen_bigram_tables.py    # core/data/kana_bigram.txt → Swift と Rust の bigram 表
+python3 scripts/gen_yatate_ngram.py     # 青空文庫 → core/data/kana_bigram.txt（要通信）＋上の表
+cd core && cargo run --bin gen-vectors  # 核 → core/vectors/{gojuon,kehai}.json
 ```
+
+仮名 bigram は Swift と Rust が**同じ一つのデータ**から起こされる。別々に収穫すると
+青空文庫のカタログの変化で二つの表が静かにずれ、iOS と Windows で違ふ絵になるため。
 
 ## 構成
 
 ```
 core/               共有核（Rust・依存ゼロ）。全 OS の殻が使ふ決定的な部分
-                    ＋ vectors/（黄金ベクトル＝Python SSOT との一致を縛る表）
+                    （旧字変換・五十音の地図・墨の氣配・原器の配列）
+                    data/    仮名 bigram の元データ（Swift・Rust 双方の表の出所）
+                    vectors/ 黄金ベクトル（表は Python が、ロジックは核が書く）
+windows/            Windows の殻（TSF テキストサービス・骨組み）。頭脳は OS 非依存
 ios/
   Sources/          ホストアプリ（有効化の案内・文机）。通信コードは無い
   YatateCore/       iOS の決定的核（行×段の地図・旧字変換・墨の氣配）。アプリと拡張が共有
