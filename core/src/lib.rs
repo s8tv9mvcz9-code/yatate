@@ -22,8 +22,10 @@
 pub mod composer;
 pub mod generated;
 pub mod gojuon;
+pub mod kehai;
 pub mod kyuji;
 
 pub use composer::Composer;
 pub use gojuon::{Deflect, Gyo};
+pub use kehai::{field, ActionField, KeyId};
 pub use kyuji::{kyuji_stream, to_kyuji, to_kyuji_body, KyujiStream, POINT_MARKER};

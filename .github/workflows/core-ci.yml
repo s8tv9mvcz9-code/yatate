@@ -66,10 +66,21 @@ jobs:
         working-directory: core
         run: cargo fmt --check
 
-      # 生成物の鮮度ゲート — Python が SSOT、Rust の表と黄金ベクトルは機械が写したもの。
-      # 再生成して差分が出たら「SSOT を変へたのに写しが古い」といふこと。
+      # 生成物の鮮度ゲート — 再生成して差分が出たら「元を変へたのに写しが古い」といふこと。
+      #
+      #   表（Python が SSOT）   : ssot/kyuji.py           → core/src/generated/kyuji_table.rs
+      #   表（データが SSOT）    : core/data/kana_bigram.txt → Swift と Rust の bigram 表
+      #   ベクトル（Python）     : ssot/kyuji.py           → core/vectors/kyuji.json
+      #   ベクトル（核がSSOT）   : core/src/*.rs           → core/vectors/{gojuon,kehai}.json
+      #
+      # bigram の収穫（gen_yatate_ngram.py）は青空文庫へ通信するので CI では回さない。
+      # 表を起こす側（gen_bigram_tables.py）は通信しないのでここで回せる。
       - name: 生成物の鮮度（表・黄金ベクトル）
         run: |
           python3 scripts/gen_rust_tables.py
+          python3 scripts/gen_bigram_tables.py
           python3 scripts/gen_parity_vectors.py
-          git diff --exit-code -- core/src/generated core/vectors
+          cargo run --quiet --manifest-path core/Cargo.toml --bin gen-vectors
+          git diff --exit-code -- \
+            core/src/generated core/vectors core/data \
+            ios/YatateCore/Sources/YatateCore/Generated

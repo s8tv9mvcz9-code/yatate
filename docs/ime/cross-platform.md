@@ -7,9 +7,10 @@
 > そして矢立の価値はほぼ全部が核の側にある。だから「iOS だけ native」ではなく
 > **「全 OS の殻が native、核は一つ」** が正解になる。字面は違ふが、望んだ結果は満たす。
 
-> **実装状況（2026-07-31）**: **M5 の前半が入つた**。`core/`（Rust）が生まれ、
-> 旧字変換・五十音の地図・作業帯が Rust の核になり、Python SSOT から生成した
-> **黄金ベクトル**（`core/vectors/kyuji.json`）を `cargo test` が流してゐる。
+> **実装状況（2026-07-31）**: **M5-a が入つた**。`core/`（Rust）に旧字変換・五十音の地図・
+> 作業帯・**墨の氣配**が揃ひ、黄金ベクトル 3 種（`kyuji` / `gojuon` / `kehai`）を
+> `cargo test` が流してゐる。仮名 bigram は Swift と Rust が**同じ一つのデータ**
+> （`core/data/kana_bigram.txt`）から起こされるやうになつた。
 > CI は ubuntu（課金 1 倍）で、生成物の鮮度ゲートつき（§6・§7・§10）。
 > 残るは Swift 側の載せ替へ（uniffi 束縛と `swift test` でのベクトル消費）で、
 > これは実機の Mac が要るため次の一歩とする。
@@ -219,11 +220,22 @@ yatate/docs/ime/*.md       ← 同じ 8 ファイル（現在、内容は同一�
 ```
 core/vectors/*.json        ← SSOT が生成する（入力 → 期待出力）
    ├─ kyuji.json    ✅済   旧字変換 248 字＋境界例（【ポイント】素通し・分割位置不変）
-   ├─ gojuon.json          行×段の座標と濁点・小書き
+   ├─ gojuon.json   ✅済   行×段×逸らしの全格子 150 通り＋逆引き 85 字
+   ├─ kehai.json    ✅済   bigram → 鍵ごとの墨・段の墨・筆脈の峰（12 例）
    ├─ coverage.json        読みの被覆検査（一致・脱落・捏造・順序入替）
-   ├─ canon.json           正規化（畳む字・畳まない長音則）
-   └─ kehai.json           bigram → 鍵ごとの墨・筆脈の峰
+   └─ canon.json           正規化（畳む字・畳まない長音則）
 ```
+
+**SSOT は二種類あり、ベクトルを書く主体が違ふ。**
+
+| 何の | SSOT | ベクトルを書くのは | 従ふのは |
+|---|---|---|---|
+| **表**（旧字 248 字・仮名 bigram） | Python / データファイル | `scripts/gen_parity_vectors.py` | Rust・Swift・… |
+| **ロジック**（五十音の幾何・氣配の射影） | **核（Rust）** | `cargo run --bin gen-vectors` | Swift・Kotlin・C++ |
+
+表は元々 Python 側にあり、そこが唯一の出所であり続ける。
+一方ロジックは「全 OS の基準」であるべきなので核が持つ——
+だから `gojuon.json` / `kehai.json` は**核が書き、殻が従ふ**。
 
 `kyuji.json` は `scripts/gen_parity_vectors.py` が **`ssot/kyuji.py` を実行して**書き出す
 （248 字の全対応＋境界 10 例＋ストリーム 22 例）。**期待値は一行も手で書いてゐない。**
@@ -297,7 +309,7 @@ M0〜M4 は [roadmap.md](./roadmap.md) の通り（iOS）。本書はその先�
 
 | 段 | 内容 | 出口条件 |
 |---|---|---|
-| **M5-a 核の新設**（**済**） | `core/`（Rust・依存ゼロ）に旧字変換（`to_kyuji` / `to_kyuji_body` / `KyujiStream`）・五十音の地図・作業帯を実装。`gen_rust_tables.py` で表を生成し、`gen_parity_vectors.py` が **Python SSOT を実行して**黄金ベクトルを書き出す。`core-ci.yml`（ubuntu・鮮度ゲートつき） | ✅ `cargo test` 18 件 green・再生成で差分なし |
+| **M5-a 核の新設**（**済**） | `core/`（Rust・依存ゼロ）に旧字変換（`to_kyuji` / `to_kyuji_body` / `KyujiStream`）・五十音の地図・作業帯・**墨の氣配**を実装。表は `gen_rust_tables.py`（旧字）と `gen_bigram_tables.py`（仮名 bigram・Swift と共通のデータから）で生成。黄金ベクトルは Python（表）と核（ロジック）が書く。`core-ci.yml`（ubuntu・鮮度ゲートつき） | ✅ `cargo test` 26 件 green・再生成で差分なし |
 | **M5-b iOS の載せ替へ** | uniffi で Swift 束縛を生成し、`YatateCore` の手書き実装を核へ差し替へる。`swift test` が同じベクトルを流す | iOS の挙動が**ベクトル一致で不変**。`swift test` と `cargo test` が両方 green |
 | **M6 macOS** | IMKit 殻（Swift）＋原器の物理キーボード配列。Developer ID 署名＋notarize の配布経路 | 自分の Mac で常用でき、原器がそのまま打てる |
 | **M7 Windows** | TSF 殻（Rust）＋候補 UI 自前描画＋COM 登録インストーラ。x64/ARM64 | メモ帳・Word・Chrome で「けふはよきてんきなり」が変換できる |
