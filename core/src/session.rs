@@ -1,15 +1,16 @@
-//! 変換セッション — **OS を知らない**入力の状態機械。
+//! 変換セッション — **どの OS でも同じ**入力の状態機械。
 //!
-//! TSF の殻（[`crate::tip`]）はここへ打鍵を渡し、返つてきた指示のとほりに
-//! 未確定文字列（composition）を描き、確定時に文字列を挿し込むだけでよい。
-//! COM を知らないので **Linux でも試験できる**——実際 CI はここを ubuntu で回す
-//! （`docs/ime/cross-platform.md` §7）。
+//! 殻はここへ打鍵を渡し、返つてきた指示のとほりに未確定文字列を描き、
+//! 確定時に文字列を挿し込むだけでよい。TSF の composition も IMKit の
+//! marked text も Android の composing text も、**呼び名が違ふだけで同じもの**である。
 //!
-//! 配列も氣配も旧字確定も自前では持たない。すべて核（`yatate-core`）から来る。
+//! 最初は Windows の殻の中に書いたが、macOS も Android も同じ物を要るので核へ上げた
+//! ——「殻に頭脳を置かない」が本設計の背骨だからである
+//! （`docs/ime/cross-platform.md` §3）。
 
-use yatate_core::composer::Composer;
-use yatate_core::genki::{Edit, Genki, DAKUTEN, HANDAKUTEN, SHIFT};
-use yatate_core::kehai::{self, ActionField};
+use crate::composer::Composer;
+use crate::genki::{Edit, Genki, DAKUTEN, HANDAKUTEN, SHIFT};
+use crate::kehai::{self, ActionField};
 
 /// 一打に対する殻への指示。
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -92,7 +93,7 @@ impl Session {
             || ch == SHIFT
             || ch == DAKUTEN
             || ch == HANDAKUTEN
-            || yatate_core::genki::FIRST_PLANE
+            || crate::genki::FIRST_PLANE
                 .iter()
                 .any(|(k, _)| *k == ch)
     }

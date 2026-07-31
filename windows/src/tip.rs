@@ -30,7 +30,7 @@ use windows::Win32::UI::TextServices::{
 };
 use windows_core::{Ref, Result};
 
-use crate::session::Session;
+use yatate_core::session::Session;
 
 /// テキストサービス本体。TSF がスレッドごとに 1 つ作る。
 #[windows_implement::implement(ITfTextInputProcessor)]
