@@ -227,3 +227,50 @@ fn 氣配のベクトルが核と一致する() {
         }
     }
 }
+
+#[test]
+fn 原器のベクトルが核と一致する() {
+    use yatate_core::genki::{self, type_keys, Genki};
+
+    let v = load("genki.json");
+    assert_eq!(v["shift"].as_str(), Some(genki::SHIFT.to_string().as_str()));
+    assert_eq!(
+        v["dakuten"].as_str(),
+        Some(genki::DAKUTEN.to_string().as_str())
+    );
+
+    for (name, plane) in [
+        ("first_plane", &genki::FIRST_PLANE[..]),
+        ("second_plane", &genki::SECOND_PLANE[..]),
+    ] {
+        let arr = v[name]
+            .as_array()
+            .unwrap_or_else(|| panic!("{name} が無い"));
+        assert_eq!(arr.len(), plane.len(), "{name} の鍵数");
+        for case in arr {
+            let key = case["key"].as_str().unwrap().chars().next().unwrap();
+            let want = case["kana"].as_str().unwrap();
+            let mut g = Genki::new();
+            if name == "second_plane" {
+                g.press(genki::SHIFT, None);
+            }
+            match g.press(key, None) {
+                yatate_core::genki::Edit::Insert(got) => {
+                    assert_eq!(got, want, "{name} の {key}")
+                }
+                other => panic!("{name} の {key} が仮名を出さない: {other:?}"),
+            }
+        }
+    }
+
+    let seqs = v["sequences"].as_array().expect("sequences");
+    assert!(
+        !seqs.is_empty(),
+        "sequences が空（ゲートが無効化されてゐる）"
+    );
+    for case in seqs {
+        let keys = case["keys"].as_str().expect("keys");
+        let want = case["kana"].as_str().expect("kana");
+        assert_eq!(type_keys(keys), want, "打鍵列 {keys:?}");
+    }
+}

@@ -13,8 +13,10 @@
 > `cargo test` が流してゐる。仮名 bigram は Swift と Rust が**同じ一つのデータ**
 > （`core/data/kana_bigram.txt`）から起こされるやうになつた。
 > CI は ubuntu（課金 1 倍）で、生成物の鮮度ゲートつき（§6・§7・§10）。
-> 残るは Swift 側の載せ替へ（uniffi 束縛と `swift test` でのベクトル消費）で、
-> これは実機の Mac が要るため次の一歩とする。
+> **M7 の骨組みも入つた** — `windows/`（TSF 殻）が生まれ、OS を知らない頭脳
+> （`session`）は ubuntu で試験でき、COM の入口は
+> `cargo check --target x86_64-pc-windows-gnu` で型検査してゐる。
+> 残るは Mac が要る二つ——M5-b（iOS の載せ替へ）と M6（macOS 殻）。
 
 ## 1. 何が標準化できないのか — IME といふ部品の性質
 
@@ -135,6 +137,21 @@ graph TD
 | 候補 UI | TSF は候補ウィンドウを OS が出してくれない。**自前で描く**（DPI・マルチモニタ・UI-less mode 対応が要る） |
 | アーキテクチャ | x64 と **ARM64** の両方を出す（ARM64 機で x64 DLL は読み込まれない） |
 | 先行実装 | Microsoft の TSF サンプルを **Rust へ移植した `ime-rs`**、`windows-chewing-tsf`（Rust＋SignPath）——**Rust で TSF IME を書くのは実証済み**の道 |
+
+!!! success "骨組みは入つた（2026-07-31）"
+    `windows/` に TSF 殻の枠が出来た。切り方が肝で、
+
+    | module | OS 依存 | どこで守るか |
+    |---|---|---|
+    | `session` | **なし**（打鍵 → 未確定文字列の状態機械） | **ubuntu で `cargo test`** |
+    | `registration` | なし（CLSID・プロファイルの値） | 同上 |
+    | `tip` | Windows（`ITfTextInputProcessor`） | **ubuntu で `cargo check --target x86_64-pc-windows-gnu`** |
+
+    IME の頭脳は `session` に居り、そこは COM を知らない——**Windows 機が無くても
+    書けるし試験できる**。COM の入口も型検査までは Linux で守れる。
+    残る「クラスファクトリ・レジストリ書き込み・候補窓の描画・実機確認」は
+    Windows 機の上でしか詰められないので、**書かずに印だけ付けてある**
+    （書けば「動くやうに見えて動かないコード」が残るだけである）。
 
 ### Android（IMS）
 
@@ -322,7 +339,8 @@ M0〜M4 は [roadmap.md](./roadmap.md) の通り（iOS）。本書はその先�
 | **M5-a 核の新設**（**済**） | `core/`（Rust・依存ゼロ）に旧字変換（`to_kyuji` / `to_kyuji_body` / `KyujiStream`）・五十音の地図・作業帯・**墨の氣配**を実装。表は `gen_rust_tables.py`（旧字）と `gen_bigram_tables.py`（仮名 bigram・Swift と共通のデータから）で生成。黄金ベクトルは Python（表）と核（ロジック）が書く。`core-ci.yml`（ubuntu・鮮度ゲートつき） | ✅ `cargo test` 26 件 green・再生成で差分なし |
 | **M5-b iOS の載せ替へ** | uniffi で Swift 束縛を生成し、`YatateCore` の手書き実装を核へ差し替へる。`swift test` が同じベクトルを流す | iOS の挙動が**ベクトル一致で不変**。`swift test` と `cargo test` が両方 green |
 | **M6 macOS** | IMKit 殻（Swift）。**配列は核の `genki` を呼ぶだけ**（実装済み）。Developer ID 署名＋notarize の配布経路 | 自分の Mac で常用でき、原器がそのまま打てる |
-| **M7 Windows** | TSF 殻（Rust）＋候補 UI 自前描画＋COM 登録インストーラ。x64/ARM64。**配列は核の `genki` を呼ぶだけ**（実装済み） | メモ帳・Word・Chrome で「けふはよきてんきなり」が変換できる |
+| **M7-a Windows の骨組み**（**済**） | `windows/` に TSF 殻の枠。`session`（OS 非依存の頭脳）＋ `registration`（登録の値）＋ `tip`（COM の入口）。ubuntu で test / clippy / fmt ＋ `--target x86_64-pc-windows-gnu` の型検査 | ✅ `cargo test` 11 件 green・Windows ターゲットで check 通過 |
+| **M7-b Windows の実装** | クラスファクトリ・DLL エクスポート・レジストリ登録・`ITfKeyEventSink`・`ITfComposition`・候補窓の自前描画。x64/ARM64、署名（OSS 枠） | メモ帳・Word・Chrome で「けふはよきてんきなり」が変換できる |
 | **M8 Android** | IMS 殻（Kotlin）＋uniffi Kotlin 束縛。二行配列は iOS の写し | iOS と同等の手数 |
 | **M9 同期** | 設定・辞書・学習の JSON スキーマと書き出し／読み込み | 端末を替へても稽古の蓄積が続く |
 

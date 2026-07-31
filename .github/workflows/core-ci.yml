@@ -13,15 +13,19 @@ on:
   push:
     paths:
       - "core/**"
+      - "windows/**"
       - "ssot/**"
       - "scripts/gen_rust_tables.py"
+      - "scripts/gen_bigram_tables.py"
       - "scripts/gen_parity_vectors.py"
       - ".github/workflows/core-ci.yml"
   pull_request:
     paths:
       - "core/**"
+      - "windows/**"
       - "ssot/**"
       - "scripts/gen_rust_tables.py"
+      - "scripts/gen_bigram_tables.py"
       - "scripts/gen_parity_vectors.py"
       - ".github/workflows/core-ci.yml"
   workflow_dispatch:
@@ -84,3 +88,34 @@ jobs:
           git diff --exit-code -- \
             core/src/generated core/vectors core/data \
             ios/YatateCore/Sources/YatateCore/Generated
+
+  # Windows の殻（TSF）— **ubuntu で検査する**（課金 1 倍）。
+  # 頭脳（session）は OS を知らないので host で試験でき、COM 側は
+  # `--target x86_64-pc-windows-gnu` の型検査で「壊れてゐない」ことまで見る。
+  # 実機での動作確認は Windows 機でしか出来ないが、それはこのゲートの役目ではない。
+  windows-shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust ツールチェーン（Windows ターゲットつき）
+        run: |
+          rustup toolchain install stable --profile minimal \
+            --component rustfmt --component clippy
+          rustup default stable
+          rustup target add x86_64-pc-windows-gnu
+
+      - name: cargo test（OS 非依存の頭脳 session・registration）
+        working-directory: windows
+        run: cargo test --all-targets
+
+      - name: cargo clippy / fmt
+        working-directory: windows
+        run: |
+          cargo clippy --all-targets -- -D warnings
+          cargo fmt --check
+
+      # COM の入口が型として成立してゐるか。Windows 機が無くてもここまでは守れる。
+      - name: cargo check（x86_64-pc-windows-gnu）
+        working-directory: windows
+        run: cargo check --target x86_64-pc-windows-gnu

@@ -54,6 +54,8 @@ Mac は要らず ubuntu で回る（[設計](docs/ime/cross-platform.md)）:
 
 ```bash
 cd core && cargo test            # 単体 ＋ 黄金ベクトル（Python SSOT との一致）
+cd windows && cargo test         # Windows 殻の頭脳（OS 非依存の部分）
+cd windows && cargo check --target x86_64-pc-windows-gnu   # COM の入口の型検査
 ```
 
 機械生成物は Python が SSOT で、Swift と Rust は写し。SSOT を変へたら再生成する
@@ -78,6 +80,7 @@ core/               共有核（Rust・依存ゼロ）。全 OS の殻が使ふ�
                     （旧字変換・五十音の地図・墨の氣配・原器の配列）
                     data/    仮名 bigram の元データ（Swift・Rust 双方の表の出所）
                     vectors/ 黄金ベクトル（表は Python が、ロジックは核が書く）
+windows/            Windows の殻（TSF テキストサービス・骨組み）。頭脳は OS 非依存
 ios/
   Sources/          ホストアプリ（有効化の案内・文机）。通信コードは無い
   YatateCore/       iOS の決定的核（行×段の地図・旧字変換・墨の氣配）。アプリと拡張が共有

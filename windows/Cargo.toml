@@ -1,0 +1,38 @@
+[package]
+name = "yatate-windows"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "矢立の Windows 殻（TSF テキストサービス）— docs/ime/cross-platform.md M7"
+license = "MIT"
+repository = "https://github.com/s8tv9mvcz9-code/yatate"
+
+[lib]
+name = "yatate_windows"
+# TSF の TIP は**文字を受け取る全アプリのプロセスへ読み込まれる in-proc COM DLL**。
+# よつて cdylib 一択で、重い実行時を持ち込めない（＝Rust が適任である理由でもある）。
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+# 決定的核。配列（原器）も氣配も旧字確定も、ここから来る（殻は描くだけ）。
+yatate-core = { path = "../core" }
+
+# COM 側は **Windows ターゲットのときだけ**依存する。
+# こちらへ入れておかないと `windows` の連れてくる crate が Linux で壊れ、
+# session（OS 非依存の頭脳）の試験まで道連れになる——それでは切り分けた意味が無い。
+# windows-implement は 0.60 系が windows-core 0.62 と組み合はさる
+# （`cargo check --target x86_64-pc-windows-gnu` で検証済み）。
+[target.'cfg(windows)'.dependencies]
+windows-core = "0.62"
+windows-implement = "0.60"
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_TextServices",
+] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
