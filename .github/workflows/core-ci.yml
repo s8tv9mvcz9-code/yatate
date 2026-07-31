@@ -46,8 +46,13 @@ jobs:
       - name: Python SSOT のテスト（依存ゼロ）
         run: python3 ssot/test_kyuji.py
 
+      # --component は 1 つずつ渡す。`--component rustfmt clippy` と書くと
+      # clippy がツールチェーン名として解釈され `invalid toolchain name` で落ちる。
       - name: Rust ツールチェーン
-        run: rustup toolchain install stable --profile minimal --component rustfmt clippy
+        run: |
+          rustup toolchain install stable --profile minimal \
+            --component rustfmt --component clippy
+          rustup default stable
 
       - name: cargo test（単体 ＋ 黄金ベクトル）
         working-directory: core
