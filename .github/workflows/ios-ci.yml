@@ -1,12 +1,23 @@
 name: iOS CI
-# ⚠ paths を ios/** だけに狭めないこと。core ジョブの鮮度ゲートは
-# 「ssot/kyuji.py を変へたのに Generated/*.swift が古いまま」を捕まへる関門で、
-# 引き金に SSOT 側と生成スクリプトを含めないとゲートが素通りになる。
+# ⚠ paths を ios/** だけに狭めないこと。二つの関門がここに掛かつてゐる:
+#   ① 生成物の鮮度 — 「ssot/kyuji.py を変へたのに Generated/*.swift が古いまま」
+#   ② 黄金ベクトルとのパリティ — 「core/（Rust）が動いたのに Swift が追随してゐない」
+# 引き金に SSOT・核・生成スクリプトを含めないと、どちらも素通りになる。
 on:
   push:
-    paths: ["ios/**", "ssot/**", "scripts/gen_swift_tables.py", ".github/workflows/ios-ci.yml"]
+    paths:
+      - "ios/**"
+      - "ssot/**"
+      - "core/**" # 黄金ベクトル（ParityTests が読む）と核の変更
+      - "scripts/gen_swift_tables.py"
+      - ".github/workflows/ios-ci.yml"
   pull_request:
-    paths: ["ios/**", "ssot/**", "scripts/gen_swift_tables.py", ".github/workflows/ios-ci.yml"]
+    paths:
+      - "ios/**"
+      - "ssot/**"
+      - "core/**" # 黄金ベクトル（ParityTests が読む）と核の変更
+      - "scripts/gen_swift_tables.py"
+      - ".github/workflows/ios-ci.yml"
 concurrency:
   group: ios-ci-${{ github.ref }}
   cancel-in-progress: true

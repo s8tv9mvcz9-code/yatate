@@ -8,12 +8,13 @@
 //!
 //! | module | OS 依存 | 中身 |
 //! |---|---|---|
-//! | [`session`] | **なし** | 打鍵 → 未確定文字列の状態機械。**Linux で試験できる** |
+//! | [`Session`]（核から再エクスポート） | **なし** | 打鍵 → 未確定文字列の状態機械 |
 //! | [`registration`] | なし（値のみ） | CLSID・プロファイル GUID・登録に要る定数 |
 //! | [`tip`] | Windows | `ITfTextInputProcessor` 実装（COM の入口） |
 //!
-//! この切り方が肝である。IME の頭脳は `session` に居り、そこは COM を知らないので
-//! **Windows 機が無くても書けるし試験できる**。CI は ubuntu（課金 1 倍）で
+//! この切り方が肝である。IME の頭脳（`Session`）は**核に居る**——macOS も Android も
+//! 同じ物を要るからで、殻ごとに書けば三度書くことになる。
+//! COM を知らない層なので **Windows 機が無くても試験できる**。CI は ubuntu（課金 1 倍）で
 //! `cargo test` と `cargo check --target x86_64-pc-windows-gnu` を回す。
 //!
 //! ## まだ出来てゐないこと（正直に）
@@ -23,9 +24,9 @@
 //! それらは Windows 機の上でしか詰められない（[`tip`] の各所に印を付けてある）。
 
 pub mod registration;
-pub mod session;
 
 #[cfg(windows)]
 pub mod tip;
 
-pub use session::{KeyAction, Session};
+/// 入力の状態機械は**核**にある（殻ごとに書かない）。使ひ勝手のため再エクスポートする。
+pub use yatate_core::session::{KeyAction, Session};

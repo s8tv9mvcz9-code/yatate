@@ -16,7 +16,11 @@
 > **M7 の骨組みも入つた** — `windows/`（TSF 殻）が生まれ、OS を知らない頭脳
 > （`session`）は ubuntu で試験でき、COM の入口は
 > `cargo check --target x86_64-pc-windows-gnu` で型検査してゐる。
-> 残るは Mac が要る二つ——M5-b（iOS の載せ替へ）と M6（macOS 殻）。
+> **入力の状態機械（`Session`）も核に上げた** — 最初は Windows の殻に書いたが、
+> macOS も Android も同じ物を要るので核へ移した（殻に頭脳を置かない）。
+> さらに **Swift をベクトルに従はせる関門**（`ios/YatateCore/Tests/.../ParityTests.swift`）を
+> 敷いた——検証は macOS CI がやるので、Mac が手元に無くても守れる。
+> 残るは Mac の要る M5-b（uniffi 束縛で iOS を核へ載せ替へ）と M6（macOS 殻）。
 
 ## 1. 何が標準化できないのか — IME といふ部品の性質
 
@@ -143,11 +147,12 @@ graph TD
 
     | module | OS 依存 | どこで守るか |
     |---|---|---|
-    | `session` | **なし**（打鍵 → 未確定文字列の状態機械） | **ubuntu で `cargo test`** |
+    | `Session`（**核**にある） | **なし**（打鍵 → 未確定文字列の状態機械） | **ubuntu で `cargo test`** |
     | `registration` | なし（CLSID・プロファイルの値） | 同上 |
     | `tip` | Windows（`ITfTextInputProcessor`） | **ubuntu で `cargo check --target x86_64-pc-windows-gnu`** |
 
-    IME の頭脳は `session` に居り、そこは COM を知らない——**Windows 機が無くても
+    IME の頭脳は `Session` で、**核に置いてある**（macOS も Android も同じ物を要るので、
+    殻ごとに書けば三度書くことになる）。そこは COM を知らない——**Windows 機が無くても
     書けるし試験できる**。COM の入口も型検査までは Linux で守れる。
     残る「クラスファクトリ・レジストリ書き込み・候補窓の描画・実機確認」は
     Windows 機の上でしか詰められないので、**書かずに印だけ付けてある**
@@ -337,7 +342,8 @@ M0〜M4 は [roadmap.md](./roadmap.md) の通り（iOS）。本書はその先�
 | 段 | 内容 | 出口条件 |
 |---|---|---|
 | **M5-a 核の新設**（**済**） | `core/`（Rust・依存ゼロ）に旧字変換（`to_kyuji` / `to_kyuji_body` / `KyujiStream`）・五十音の地図・作業帯・**墨の氣配**を実装。表は `gen_rust_tables.py`（旧字）と `gen_bigram_tables.py`（仮名 bigram・Swift と共通のデータから）で生成。黄金ベクトルは Python（表）と核（ロジック）が書く。`core-ci.yml`（ubuntu・鮮度ゲートつき） | ✅ `cargo test` 26 件 green・再生成で差分なし |
-| **M5-b iOS の載せ替へ** | uniffi で Swift 束縛を生成し、`YatateCore` の手書き実装を核へ差し替へる。`swift test` が同じベクトルを流す | iOS の挙動が**ベクトル一致で不変**。`swift test` と `cargo test` が両方 green |
+| **M5-b1 Swift をベクトルに従はせる**（**済**） | `ParityTests.swift` が `core/vectors/*.json` を読み、Swift の手書き実装（旧字表・五十音・氣配）が核と同じ答へを出すかを検査。**検証は macOS CI**（公開リポなので無料枠） | ✅ Swift と核が同じ表・同じ幾何・同じ氣配を返す |
+| **M5-b2 iOS の載せ替へ** | uniffi で Swift 束縛を生成し、`YatateCore` の手書き実装を核の呼び出しへ差し替へる | iOS の挙動が**ベクトル一致で不変**。`swift test` と `cargo test` が両方 green |
 | **M6 macOS** | IMKit 殻（Swift）。**配列は核の `genki` を呼ぶだけ**（実装済み）。Developer ID 署名＋notarize の配布経路 | 自分の Mac で常用でき、原器がそのまま打てる |
 | **M7-a Windows の骨組み**（**済**） | `windows/` に TSF 殻の枠。`session`（OS 非依存の頭脳）＋ `registration`（登録の値）＋ `tip`（COM の入口）。ubuntu で test / clippy / fmt ＋ `--target x86_64-pc-windows-gnu` の型検査 | ✅ `cargo test` 11 件 green・Windows ターゲットで check 通過 |
 | **M7-b Windows の実装** | クラスファクトリ・DLL エクスポート・レジストリ登録・`ITfKeyEventSink`・`ITfComposition`・候補窓の自前描画。x64/ARM64、署名（OSS 枠） | メモ帳・Word・Chrome で「けふはよきてんきなり」が変換できる |

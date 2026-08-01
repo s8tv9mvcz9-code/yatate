@@ -60,18 +60,38 @@ targets:
 
 | 層 | 実体 | 依存 | 応答 | 賄ふ範囲 |
 |---|---|---|---|---|
-| **T0 決定的核** | YatateCore（Swift・純関数） | なし | <1ms | 打鍵エコー・制約整合・旧字確定・区切り操作 |
+| **T0 決定的核** | **`core/`（Rust・依存ゼロ）** ＋ 各殻の薄い層 | なし | <1ms | 打鍵エコー・配列・制約整合・旧字確定・区切り操作 |
 | **T1 端末内辞書** | AzooKeyKanaKanjiConverter＋文語辞書（§3） | 拡張バンドル同梱 | <50ms 目標 | かな→漢字候補・行打ちの骨格引き |
 | **T2 サーバ校合** | `POST /convert`（既存） | フルアクセス＋網 | 数百 ms〜（cold start は分単位もあり得る） | LLM 文節分割・コーパス実例・情調・出典 |
 
-### T0 — 決定的核（`app/kana.py`・`app/kyuji.py` の写し）
+### T0 — 決定的核
 
-Python が SSOT、Swift は機械生成＋パリティテストで従属（[protocol.md](./protocol.md) §5）。
-移植対象は精読で確定済み: `canon`／`coverage_error`／`rank_candidates` の並べ替へ骨格／
-`merge_segments`・`split_segment`／`compose`、旧字表 248 字（`AMBIGUOUS_SHINJI`
-「弁予余欠芸」は除外のまま）、新設の `KANA_INFO`（行・段・濁・小）と `constraint_error`。
-`eval/test_kana.py` の assert 群が**そのままパリティベクトルの写し元**になる。
-依存ゼロ・状態最小なので移植は素直である。
+!!! success "**実体は `core/`（Rust）になつた**（2026-07-31）"
+    当初は「Swift で書き、Python を SSOT として従属させる」形で設計したが、
+    macOS・Windows へ広げる段で**核を一つに**した
+    （[cross-platform.md](./cross-platform.md) §5 — 決め手は TSF が Rust か C++ しか
+    許さないこと）。iOS の殻は Swift のままで、native 性は落ちてゐない。
+
+いま核に在るもの（[`core/README.md`](../../core/README.md)）:
+
+| module | 中身 |
+|---|---|
+| `kyuji` | 新字体→旧字体（1:1・ストリーム安全・【ポイント】素通し） |
+| `gojuon` | 五十音の幾何（行×段×逸らし・逆引き） |
+| `genki` | **原器**（縦組五十音配列）——macOS / Windows が打つ配列 |
+| `kehai` | 墨の氣配（bigram → 鍵の墨・段の墨・筆脈の峰） |
+| `composer` / `session` | 作業帯と、打鍵 → 未確定文字列の状態機械 |
+
+**SSOT は二種類ある**（[cross-platform.md](./cross-platform.md) §6）:
+
+- **表**（旧字 248 字・仮名 bigram）… Python / データファイルが SSOT。
+  Swift と Rust の表は機械生成の写し
+- **ロジック**（五十音の幾何・氣配・原器）… **核が SSOT**。
+  黄金ベクトルを核が書き、殻の言語がそれに従ふ
+
+まだ核に無いのは變換側の決定的部分（`canon`／`coverage_error`／`rank_candidates` の
+並べ替へ骨格／`merge_segments`・`split_segment`）で、T1 を入れる段で移す
+（`eval/test_kana.py` の assert 群がそのままベクトルの写し元になる）。
 
 ### T1 — 端末内辞書層
 
@@ -199,11 +219,18 @@ LOUDS 化で数 MB、遅延ロードなので常駐は一部）。**辞書の質
 
 ## 8. CI とパリティ
 
-- `eval-ci.yml`（$0・依存ゼロの純関数テスト）に: `KANA_INFO`／`constraint_error` の
-  Python テストと、`scripts/gen_swift_tables.py`・`gen_parity_vectors.py` の
-  **生成物鮮度チェック**（再生成して `git diff --exit-code`）を追加。
-- `ios-ci.yml` に: `swift test`（YatateCoreTests がパリティベクトルを読む）を追加。
-  既存のシミュレータビルドは拡張ターゲットを自動的に含む（同一プロジェクト）。
+**現況（2026-07-31）— 敷き終へた分:**
+
+| workflow | 走る場所 | 何を守るか |
+|---|---|---|
+| `core-ci.yml` | **ubuntu**（課金 1 倍） | 核の `cargo test`（黄金ベクトル込み）・clippy・fmt、**生成物の鮮度 4 経路**、Windows 殻の型検査 |
+| `ios-ci.yml` | macOS | `swift test`（**`ParityTests` が核のベクトルを読む**）・生成物の鮮度・シミュレータビルド |
+
+**核の検証は ubuntu で終はらせ、macOS は「殻がビルドできるか」だけ見る**のが原則
+（macOS ランナーは 10 倍・Windows は 2 倍消費する）。
+
+- `ios-ci.yml` の paths には **`core/**` も入れてある** —— 入れないと
+  「核が動いたのに Swift が追随してゐない」を素通しさせてしまふ。
 - 既存の教訓をそのまま適用: workflow YAML はブロックスタイル、path フィルタに
   `ios/YatateCore/**`・`ios/YatateKeyboard/**`・生成スクリプトを**最初から**入れる
   （`deploy-backend.yml` の path 漏れ事故の再発防止）。

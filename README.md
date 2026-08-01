@@ -76,11 +76,11 @@ cd core && cargo run --bin gen-vectors  # 核 → core/vectors/{gojuon,kehai}.js
 ## 構成
 
 ```
-core/               共有核（Rust・依存ゼロ）。全 OS の殻が使ふ決定的な部分
-                    （旧字変換・五十音の地図・墨の氣配・原器の配列）
+core/               共有核（Rust・依存ゼロ）→ core/README.md
+                    旧字変換・五十音の地図・原器の配列・墨の氣配・入力の状態機械
                     data/    仮名 bigram の元データ（Swift・Rust 双方の表の出所）
                     vectors/ 黄金ベクトル（表は Python が、ロジックは核が書く）
-windows/            Windows の殻（TSF テキストサービス・骨組み）。頭脳は OS 非依存
+windows/            Windows の殻（TSF・骨組み）→ windows/README.md
 ios/
   Sources/          ホストアプリ（有効化の案内・文机）。通信コードは無い
   YatateCore/       iOS の決定的核（行×段の地図・旧字変換・墨の氣配）。アプリと拡張が共有
