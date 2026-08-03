@@ -142,7 +142,27 @@ graph TD
 | アーキテクチャ | x64 と **ARM64** の両方を出す（ARM64 機で x64 DLL は読み込まれない） |
 | 先行実装 | Microsoft の TSF サンプルを **Rust へ移植した `ime-rs`**、`windows-chewing-tsf`（Rust＋SignPath）——**Rust で TSF IME を書くのは実証済み**の道 |
 
-!!! success "骨組みは入つた（2026-07-31）"
+!!! success "実装が入つた（2026-08-03）— 残るは実機で打つことだけ"
+    骨組み（M7-a）の上に **M7-b の実装**が乗つた。COM の四つの出口・`IClassFactory`・
+    `ITfKeyEventSink`・`ITfEditSession` による composition・レジストリ登録が揃つてゐる。
+
+    新設した **`keymap`（JIS 物理鍵盤 → 原器）が心臓部**である。配列で意味の変はる
+    3 鍵（さ `sc 0x28`・し `sc 0x27`・前置シフト `sc 0x0D`）を**走査符号＝物理位置**で引く。
+    「し」は刻印も物理位置も同じなのに VK だけが JIS と US で違ふ（`0xBB` 対 `0xBA`）ので、
+    US 前提の VK 表を写すと実機で黙つて「さ」になる——位置で引けば配列判定が要らなくなり、
+    当て損なひが無音の誤爆になる箇所がそもそも消える。`ToUnicodeEx` は使はない
+    （かなロックで半角カタカナが返り破綻する上、`OnTestKeyDown` の副作用禁止に反する）。
+
+    **Windows 機なしで、実機に触れる直前まで機械で守れてゐる**:
+    `cargo test` 18 件（原器 33 鍵の往復・JIS/US の取り違へ・打鍵列 → 仮名 → 旧字確定）、
+    clippy 両ターゲット、**実 DLL のリンク**（PE32+）、**エクスポート表の検査**
+    （`DllGetClassObject` 等が実在するか＝「読み込まれない DLL」の防止）。
+    配布物は `windows-ci.yml` が MSVC で **x64 と ARM64**（ARM64 機のネイティブ処理に
+    x64 の DLL は読み込まれない）を組み、`install.ps1` が機械と DLL の種別を照合する。
+
+    未了は**候補窓（辞書層 T1 待ち）・表示属性・署名**、そして**実機での確認**である。
+
+!!! note "骨組みの段（M7-a・2026-07-31）"
     `windows/` に TSF 殻の枠が出来た。切り方が肝で、
 
     | module | OS 依存 | どこで守るか |
@@ -346,7 +366,7 @@ M0〜M4 は [roadmap.md](./roadmap.md) の通り（iOS）。本書はその先�
 | **M5-b2 iOS の載せ替へ** | uniffi で Swift 束縛を生成し、`YatateCore` の手書き実装を核の呼び出しへ差し替へる | iOS の挙動が**ベクトル一致で不変**。`swift test` と `cargo test` が両方 green |
 | **M6 macOS** | IMKit 殻（Swift）。**配列は核の `genki` を呼ぶだけ**（実装済み）。Developer ID 署名＋notarize の配布経路 | 自分の Mac で常用でき、原器がそのまま打てる |
 | **M7-a Windows の骨組み**（**済**） | `windows/` に TSF 殻の枠。`session`（OS 非依存の頭脳）＋ `registration`（登録の値）＋ `tip`（COM の入口）。ubuntu で test / clippy / fmt ＋ `--target x86_64-pc-windows-gnu` の型検査 | ✅ `cargo test` 11 件 green・Windows ターゲットで check 通過 |
-| **M7-b Windows の実装** | クラスファクトリ・DLL エクスポート・レジストリ登録・`ITfKeyEventSink`・`ITfComposition`・候補窓の自前描画。x64/ARM64、署名（OSS 枠） | メモ帳・Word・Chrome で「けふはよきてんきなり」が変換できる |
+| **M7-b Windows の実装**（**機械検証まで済・実機待ち**） | クラスファクトリ・DLL エクスポート・レジストリ登録・`ITfKeyEventSink`・`ITfComposition`。**JIS 物理鍵盤の翻訳（`keymap`）を新設**し、配列で意味の変はる 3 鍵を走査符号で引く。x64/ARM64 の配布物を CI が組む | ✅ `cargo test` 18 件・実 DLL のリンク・**エクスポート表の検査**が green。**残るは実機で打つこと**（候補窓・署名は未了） |
 | **M8 Android** | IMS 殻（Kotlin）＋uniffi Kotlin 束縛。二行配列は iOS の写し | iOS と同等の手数 |
 | **M9 同期** | 設定・辞書・学習の JSON スキーマと書き出し／読み込み | 端末を替へても稽古の蓄積が続く |
 
