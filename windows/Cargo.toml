@@ -29,6 +29,10 @@ windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_System_Com",
     "Win32_System_LibraryLoader",
+    "Win32_Security",               # RegCreateKeyExW の SECURITY_ATTRIBUTES
+    "Win32_System_Registry",        # DllRegisterServer が HKCR へ書く
+    "Win32_System_SystemServices",  # DllMain の DLL_PROCESS_ATTACH
+    "Win32_UI_Input_KeyboardAndMouse", # 修飾キーの状態・鍵盤種別
     "Win32_UI_TextServices",
 ] }
 

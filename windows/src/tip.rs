@@ -1,44 +1,60 @@
-//! COM の入口 — `ITfTextInputProcessor` の実装（TSF が矢立を起こす場所）。
+//! COM の入口 — TSF が矢立を起こす場所。
 //!
-//! **ここは薄い。** 打鍵の意味を決めるのは [`crate::session`]（OS を知らない層）で、
+//! **ここは薄い。** 打鍵の意味を決めるのは核（`yatate_core::Session`）で、
 //! この module は TSF の作法に翻訳するだけである。
 //!
 //! ## TSF の生き死に
 //!
 //! ```text
 //! TSF が DLL を読む
-//!   → DllGetClassObject でクラスファクトリを得る（**未実装**）
+//!   → DllGetClassObject でクラスファクトリを得る（crate::factory）
 //!   → CoCreateInstance で Tip を作る
 //!   → Activate(thread_mgr, client_id)   ← ここで鍵盤の目（KeyEventSink）を刺す
 //!   → 打鍵ごとに OnTestKeyDown / OnKeyDown が来る
 //!   → Deactivate() で目を外す
 //! ```
 //!
-//! ## まだ Windows 機が要ること（印）
+//! ## 打鍵の二段（TSF の契約）
 //!
-//! - `DllMain` / `DllGetClassObject` / `DllCanUnloadNow` / `DllRegisterServer`
-//! - `ITfKeyEventSink` を挿し、仮想キーコード → 文字への写像を実機で詰める
-//!   （原器は JIS 前提。`;` `:` の位置は配列によつて動く）
-//! - `ITfComposition` で未確定文字列を描き、確定時に差し替へる
-//! - 候補窓（TSF は出してくれない。DPI・マルチモニタ・UI-less mode を自前で見る）
+//! | 段 | 問はれてゐること | 矢立の答へ方 | 副作用 |
+//! |---|---|---|---|
+//! | `OnTestKeyDown` | 「この鍵を食ふか？」 | [`Session::wants_key`] | **禁止**（状態を触らない） |
+//! | `OnKeyDown` | 「では処理せよ」 | [`Session::key`] ＋ 文書の書き換へ | 可 |
 //!
-//! いづれも実機の上でしか正しさを確かめられないので、**ここでは書かない**。
-//! 書けば「動くやうに見えて動かないコード」が残るだけである。
+//! `OnTestKeyDown` で状態を変へると、TSF が同じ鍵を二度問うたときに食ひ違ふ。
+//! ここを取り違へた IME は「たまに一文字余分に入る」といふ再現し難い病を持つ。
 
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+
+use windows::core::{implement, IUnknownImpl, Interface, Ref, Result, BOOL};
+use windows::Win32::Foundation::{LPARAM, WPARAM};
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CONTROL, VK_MENU};
 use windows::Win32::UI::TextServices::{
-    ITfTextInputProcessor, ITfTextInputProcessor_Impl, ITfThreadMgr,
+    ITfComposition, ITfCompositionSink, ITfCompositionSink_Impl, ITfContext, ITfEditSession,
+    ITfKeyEventSink, ITfKeyEventSink_Impl, ITfKeystrokeMgr, ITfTextInputProcessor,
+    ITfTextInputProcessor_Impl, ITfThreadMgr,
 };
-use windows_core::{Ref, Result};
 
-use yatate_core::session::Session;
+use yatate_core::session::{KeyAction, Session};
+
+use crate::edit::{request, CompositionCell, CompositionEdit, EditAction};
+use crate::keymap::{self, Scan, Vk};
 
 /// テキストサービス本体。TSF がスレッドごとに 1 つ作る。
-#[windows_implement::implement(ITfTextInputProcessor)]
+///
+/// 状態は素の [`RefCell`] で持つ。TIP は STA（スレッドごとの apartment）で動き、
+/// 同じスレッドからしか触られないためである。
+#[implement(ITfTextInputProcessor, ITfKeyEventSink, ITfCompositionSink)]
 pub struct Tip {
-    /// 打鍵の状態機械（OS 非依存）。実機配線では内部可変性が要る。
-    _session: Session,
+    /// 打鍵の状態機械（**OS 非依存**）。矢立の頭脳はここに居る。
+    session: RefCell<Session>,
     /// `Activate` で受け取るクライアント ID（sink の登録・解除に使ふ）。
-    _client_id: std::cell::Cell<u32>,
+    client_id: Cell<u32>,
+    /// TSF の元締め。`Deactivate` で目を外すために持つ。
+    thread_mgr: RefCell<Option<ITfThreadMgr>>,
+    /// いま立つてゐる未確定文字列（編集セッションと共有する）。
+    composition: CompositionCell,
 }
 
 impl Default for Tip {
@@ -50,25 +66,254 @@ impl Default for Tip {
 impl Tip {
     pub fn new() -> Self {
         Self {
-            _session: Session::new(),
-            _client_id: std::cell::Cell::new(0),
+            session: RefCell::new(Session::new()),
+            client_id: Cell::new(0),
+            thread_mgr: RefCell::new(None),
+            composition: Rc::new(RefCell::new(None)),
+        }
+    }
+
+    /// いま未確定文字列を抱へてゐるか。
+    fn is_composing(&self) -> bool {
+        self.session.borrow().is_composing()
+    }
+
+    /// `lParam` から走査符号（物理位置）を取り出す。16〜23 bit に入つてくる。
+    fn scancode_of(lparam: LPARAM) -> Scan {
+        ((lparam.0 >> 16) & 0xFF) as Scan
+    }
+
+    /// Ctrl / Alt が押されてゐるか。押されてゐれば矢立は手を出さない
+    /// （Ctrl+C 等の短絡キーを食ふと、アプリの働きを奪つてしまふ）。
+    fn modifier_held() -> bool {
+        // SAFETY: 引数は仮想キーコードのみ。読み取り専用の問合せ。
+        unsafe { (GetKeyState(VK_CONTROL.0 as i32) < 0) || (GetKeyState(VK_MENU.0 as i32) < 0) }
+    }
+
+    /// この打鍵を矢立が扱ふか（**問はれてゐるだけ。状態は触らない**）。
+    fn wants(&self, vk: Vk, scan: Scan) -> bool {
+        if Self::modifier_held() {
+            return false;
+        }
+        // 未確定を抱へてゐる間は、機能キーも受けて確定・取り消しの機会を残す
+        if self.is_composing()
+            && matches!(
+                vk,
+                keymap::VK_BACK | keymap::VK_RETURN | keymap::VK_ESCAPE | keymap::VK_SPACE
+            )
+        {
+            return true;
+        }
+        match keymap::genki_char(vk, scan) {
+            Some(ch) => self.session.borrow().wants_key(ch),
+            None => false,
+        }
+    }
+
+    /// 文書へ指示を出す（編集セッションを願ひ出る）。
+    fn apply(&self, context: &ITfContext, sink: &ITfCompositionSink, action: EditAction) {
+        let edit: ITfEditSession = CompositionEdit::new(
+            context.clone(),
+            Rc::clone(&self.composition),
+            sink.clone(),
+            action,
+        )
+        .into();
+        // 失敗しても打鍵は食つたままにする（半端に OS へ流すと二重入力になる）。
+        let _ = request(context, self.client_id.get(), edit);
+    }
+
+    /// 打鍵を実際に処理する。返り値は「食つたか」。
+    fn handle_key(
+        &self,
+        context: &ITfContext,
+        sink: &ITfCompositionSink,
+        vk: Vk,
+        scan: Scan,
+    ) -> bool {
+        if Self::modifier_held() {
+            return false;
+        }
+
+        // ── 機能キー（未確定を抱へてゐるときだけ意味を持つ）──
+        if self.is_composing() {
+            match vk {
+                keymap::VK_RETURN | keymap::VK_SPACE => {
+                    // M7-b では候補窓を持たないので、確定＝仮名のまま（旧字は核が確定させる）
+                    let action = match self.session.borrow_mut().commit() {
+                        KeyAction::Commit(text) => EditAction::Commit(text),
+                        _ => EditAction::Cancel,
+                    };
+                    self.apply(context, sink, action);
+                    return true;
+                }
+                keymap::VK_ESCAPE => {
+                    self.session.borrow_mut().cancel();
+                    self.apply(context, sink, EditAction::Cancel);
+                    return true;
+                }
+                keymap::VK_BACK => {
+                    let still = self.session.borrow_mut().backspace();
+                    let action = if still {
+                        EditAction::Update(self.session.borrow().preedit().to_string())
+                    } else {
+                        EditAction::Cancel
+                    };
+                    self.apply(context, sink, action);
+                    return true;
+                }
+                _ => {}
+            }
+        }
+
+        // ── 原器の鍵 ──
+        let Some(ch) = keymap::genki_char(vk, scan) else {
+            return false;
+        };
+        let action = self.session.borrow_mut().key(ch);
+        match action {
+            KeyAction::Update => {
+                let text = self.session.borrow().preedit().to_string();
+                self.apply(context, sink, EditAction::Update(text));
+                true
+            }
+            // 前置シフトが立つた等。**食ふ**（流すと `^` が入力されてしまふ）
+            KeyAction::Swallow => true,
+            KeyAction::Passthrough => false,
+            KeyAction::Commit(text) => {
+                self.apply(context, sink, EditAction::Commit(text));
+                true
+            }
         }
     }
 }
 
 impl ITfTextInputProcessor_Impl for Tip_Impl {
     /// TSF が矢立を起こす。ここで鍵盤の目（`ITfKeyEventSink`）を刺す。
-    fn Activate(&self, _thread_mgr: Ref<'_, ITfThreadMgr>, client_id: u32) -> Result<()> {
-        self.this._client_id.set(client_id);
-        // TODO(Windows 機): ITfKeyEventSink を AdviseKeyEventSink で登録する。
-        // 打鍵は OnTestKeyDown → Session::wants_key、OnKeyDown → Session::key へ渡す。
+    fn Activate(&self, ptim: Ref<'_, ITfThreadMgr>, tid: u32) -> Result<()> {
+        let me = &self.this;
+        me.client_id.set(tid);
+
+        let Some(thread_mgr) = ptim.as_ref() else {
+            return Ok(());
+        };
+        *me.thread_mgr.borrow_mut() = Some(thread_mgr.clone());
+
+        // 自分自身を鍵盤の目として差し出す
+        let sink: ITfKeyEventSink = self.to_interface();
+        // SAFETY: thread_mgr は TSF が寄越した有効な参照。sink は自分自身。
+        unsafe {
+            let keystroke: ITfKeystrokeMgr = thread_mgr.cast()?;
+            keystroke.AdviseKeyEventSink(tid, &sink, true)?;
+        }
         Ok(())
     }
 
     /// 片付け。刺した目を抜く。
     fn Deactivate(&self) -> Result<()> {
-        // TODO(Windows 機): UnadviseKeyEventSink と composition の後始末。
-        self.this._client_id.set(0);
+        let me = &self.this;
+        if let Some(thread_mgr) = me.thread_mgr.borrow_mut().take() {
+            // SAFETY: 有効な参照。失敗しても片付けは続ける。
+            unsafe {
+                if let Ok(keystroke) = thread_mgr.cast::<ITfKeystrokeMgr>() {
+                    let _ = keystroke.UnadviseKeyEventSink(me.client_id.get());
+                }
+            }
+        }
+        me.session.borrow_mut().cancel();
+        *me.composition.borrow_mut() = None;
+        me.client_id.set(0);
         Ok(())
+    }
+}
+
+impl ITfKeyEventSink_Impl for Tip_Impl {
+    /// 入力欄が替はつた。抱へてゐた未確定文字列は捨てる（別の欄へ持ち越さない）。
+    fn OnSetFocus(&self, _fforeground: BOOL) -> Result<()> {
+        let me = &self.this;
+        me.session.borrow_mut().cancel();
+        *me.composition.borrow_mut() = None;
+        Ok(())
+    }
+
+    /// **問はれてゐるだけ。状態を触つてはならない。**
+    fn OnTestKeyDown(
+        &self,
+        _pic: Ref<'_, ITfContext>,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> Result<BOOL> {
+        let me = &self.this;
+        let vk = wparam.0 as Vk;
+        let scan = Tip::scancode_of(lparam);
+        Ok(me.wants(vk, scan).into())
+    }
+
+    fn OnTestKeyUp(
+        &self,
+        _pic: Ref<'_, ITfContext>,
+        _wparam: WPARAM,
+        _lparam: LPARAM,
+    ) -> Result<BOOL> {
+        // 離鍵は使はない（原器は押下だけで決まる）
+        Ok(false.into())
+    }
+
+    /// 実際に処理する段。
+    fn OnKeyDown(&self, pic: Ref<'_, ITfContext>, wparam: WPARAM, lparam: LPARAM) -> Result<BOOL> {
+        let me = &self.this;
+        let Some(context) = pic.as_ref() else {
+            return Ok(false.into());
+        };
+        let sink: ITfCompositionSink = self.to_interface();
+        let vk = wparam.0 as Vk;
+        let scan = Tip::scancode_of(lparam);
+        Ok(me.handle_key(context, &sink, vk, scan).into())
+    }
+
+    fn OnKeyUp(&self, _pic: Ref<'_, ITfContext>, _wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
+        Ok(false.into())
+    }
+
+    fn OnPreservedKey(
+        &self,
+        _pic: Ref<'_, ITfContext>,
+        _rguid: *const windows::core::GUID,
+    ) -> Result<BOOL> {
+        // 予約キー（IME の切替等）は今は持たない
+        Ok(false.into())
+    }
+}
+
+impl ITfCompositionSink_Impl for Tip_Impl {
+    /// アプリ側の都合で未確定文字列が打ち切られた（別の場所を触つた等）。
+    /// **核の状態も一緒に捨てる**——ここを忘れると画面と頭脳が食ひ違ふ。
+    fn OnCompositionTerminated(
+        &self,
+        _ecwrite: u32,
+        _pcomposition: Ref<'_, ITfComposition>,
+    ) -> Result<()> {
+        let me = &self.this;
+        me.session.borrow_mut().cancel();
+        *me.composition.borrow_mut() = None;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 走査符号の取り出し（`lParam` の 16〜23 bit）。実機の値で確かめる。
+    #[test]
+    fn 走査符号を_lparam_から取り出せる() {
+        // 「:」= sc 0x28。lParam は 0x00280001 のやうな形で来る。
+        assert_eq!(Tip::scancode_of(LPARAM(0x0028_0001)), 0x28);
+        // 「;」= sc 0x27
+        assert_eq!(Tip::scancode_of(LPARAM(0x0027_0001)), 0x27);
+        // 「^」= sc 0x0D
+        assert_eq!(Tip::scancode_of(LPARAM(0x000D_0001)), 0x0D);
+        // 拡張ビット等が立つてゐても 8bit だけを見る
+        assert_eq!(Tip::scancode_of(LPARAM(0x0128_0001u32 as isize)), 0x28);
     }
 }

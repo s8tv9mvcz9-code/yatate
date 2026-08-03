@@ -1,0 +1,188 @@
+name: Windows CI
+# 矢立の Windows 殻（TSF テキストサービス）の検証と配布物づくり。
+#
+# **二段に分ける。**
+#   ① ubuntu（課金 1 倍）— OS を知らない部分を全部ここで落とす。
+#      頭脳（Session）・鍵盤の翻訳（keymap）の試験、clippy、fmt、
+#      さらに **実 DLL のリンク**と**エクスポート表の検査**まで Linux で出来る。
+#   ② windows（課金 2 倍・公開リポなので無料枠）— 配る形（MSVC）で組み、
+#      **x64 と ARM64 の両方**を出す。ARM64 機のネイティブ処理（メモ帳・Edge 等）に
+#      x64 の DLL は読み込まれないので、両方無いと片方の機で動かない。
+#
+# ⚠ paths を windows/** だけに狭めないこと。殻は核（core/）の上に乗つてゐるので、
+# 核が動いたのに殻が古いままなら、その食ひ違ひはここで落ちるべきである。
+on:
+  push:
+    paths:
+      - "windows/**"
+      - "core/**"
+      - ".github/workflows/windows-ci.yml"
+  pull_request:
+    paths:
+      - "windows/**"
+      - "core/**"
+      - ".github/workflows/windows-ci.yml"
+  workflow_dispatch: # 実機検証用に手で回せるやうにしておく
+
+concurrency:
+  group: windows-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ── ① OS を知らない部分は全部ここで落とす（ubuntu・課金 1 倍）──
+  core-gates:
+    name: 頭脳と鍵盤の翻訳（ubuntu）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust の支度
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup component add clippy rustfmt
+          rustup target add x86_64-pc-windows-gnu
+
+      # 実 DLL をリンクするには MinGW が要る（Linux 上で PE32+ が出来る）
+      - name: MinGW（実 DLL のリンク用）
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq mingw-w64
+
+      - name: 試験（OS 非依存の頭脳・JIS 鍵盤の翻訳）
+        working-directory: windows
+        run: cargo test --all-targets
+
+      - name: clippy（両ターゲット）
+        working-directory: windows
+        run: |
+          cargo clippy --all-targets -- -D warnings
+          cargo clippy --target x86_64-pc-windows-gnu -- -D warnings
+
+      - name: fmt
+        working-directory: windows
+        run: cargo fmt --check
+
+      - name: 実 DLL としてリンクが通るか
+        working-directory: windows
+        run: cargo build --release --target x86_64-pc-windows-gnu
+
+      # **これが「読み込まれない DLL」を防ぐ関門である。**
+      # COM の出口は #[no_mangle] extern "system" でなければならず、
+      # 名前が飾られたり欠けたりすると、TSF から見えず無音で失敗する。
+      # 症状（「登録できない」「打つても何も起きない」）から原因を辿るのは難しいので、
+      # 機械で名指しして確かめる。
+      - name: エクスポート表に COM の出口が実在するか
+        working-directory: windows
+        run: |
+          set -euo pipefail
+          DLL=target/x86_64-pc-windows-gnu/release/yatate_windows.dll
+          x86_64-w64-mingw32-objdump -p "$DLL" > exports.txt
+          for sym in DllGetClassObject DllCanUnloadNow DllRegisterServer DllUnregisterServer DllMain; do
+            if grep -qE "^[[:space:]]*\[[[:space:]]*[0-9]+\][[:space:]]+$sym$" exports.txt; then
+              echo "  ✓ $sym"
+            else
+              echo "::error::$sym がエクスポートされてゐない（#[no_mangle] extern \"system\" を確かめよ）"
+              exit 1
+            fi
+          done
+
+  # ── ② 配る形（MSVC）で組む。x64 と ARM64 の両方 ──
+  build:
+    name: 配布物（${{ matrix.target }}）
+    runs-on: windows-latest
+    needs: core-gates
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            arch: x64
+          # ARM64 機のネイティブ処理には ARM64 の DLL が要る（x64 は読み込まれない）
+          - target: aarch64-pc-windows-msvc
+            arch: arm64
+    env:
+      # CRT を静的リンクする。**VC++ 再頒布パッケージを要求しないため。**
+      # TIP は他人のプロセスへ読み込まれる部品なので、依存は少ないほどよい。
+      RUSTFLAGS: "-C target-feature=+crt-static"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust の支度
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add ${{ matrix.target }}
+
+      # x64 ランナーでも動く試験だけを回す（ARM64 の実行は出来ない）
+      - name: 試験（x64 のときだけ）
+        if: matrix.arch == 'x64'
+        working-directory: windows
+        run: cargo test --all-targets
+
+      - name: ビルド
+        working-directory: windows
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: エクスポート表の検査（配る形でも確かめる）
+        working-directory: windows
+        shell: pwsh
+        run: |
+          $dll = "target/${{ matrix.target }}/release/yatate_windows.dll"
+          if (-not (Test-Path $dll)) { throw "DLL が出来てゐない: $dll" }
+          $dumpbin = Get-ChildItem "${env:ProgramFiles(x86)}\Microsoft Visual Studio" -Recurse -Filter dumpbin.exe -ErrorAction SilentlyContinue |
+                     Select-Object -First 1
+          if ($null -eq $dumpbin) { $dumpbin = Get-ChildItem "${env:ProgramFiles}\Microsoft Visual Studio" -Recurse -Filter dumpbin.exe -ErrorAction SilentlyContinue | Select-Object -First 1 }
+          if ($null -eq $dumpbin) { Write-Host "::warning::dumpbin が見つからないので検査を飛ばす"; exit 0 }
+          $out = & $dumpbin.FullName /exports $dll | Out-String
+          foreach ($sym in @("DllGetClassObject","DllCanUnloadNow","DllRegisterServer","DllUnregisterServer")) {
+            if ($out -notmatch [regex]::Escape($sym)) { throw "$sym がエクスポートされてゐない" }
+            Write-Host "  OK $sym"
+          }
+
+      - name: 配布物をまとめる
+        shell: pwsh
+        run: |
+          $stage = "dist/yatate-${{ matrix.arch }}"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item "windows/target/${{ matrix.target }}/release/yatate_windows.dll" $stage
+          Copy-Item "windows/install.ps1" $stage
+          Copy-Item "windows/README.md" $stage
+          Compress-Archive -Path "$stage/*" -DestinationPath "yatate-windows-${{ matrix.arch }}.zip" -Force
+
+      - name: アーティファクト
+        uses: actions/upload-artifact@v4
+        with:
+          name: yatate-windows-${{ matrix.arch }}
+          path: yatate-windows-${{ matrix.arch }}.zip
+          retention-days: 30
+
+  # ── main へ入つたら、同じ URL で拾へるローリングリリースへ添付する ──
+  publish:
+    name: ローリングリリース（windows-latest）
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: yatate-windows-*
+          merge-multiple: true
+      - name: 添付
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # view が一時障害で失敗しても create の 422 で落ちないやう三段構へ
+          gh release view windows-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create windows-latest --repo "$GITHUB_REPOSITORY" \
+              --prerelease --title "Windows（ローリング・未署名）" \
+              --notes "main の最新。**ARM64 機は arm64 を、Intel/AMD 機は x64 を**入れる。導入は README.md 参照。" || \
+            gh release view windows-latest --repo "$GITHUB_REPOSITORY" >/dev/null
+          gh release upload windows-latest yatate-windows-*.zip --clobber --repo "$GITHUB_REPOSITORY"
+          gh release edit windows-latest --repo "$GITHUB_REPOSITORY" \
+            --notes "main の最新（commit: ${GITHUB_SHA}）。**ARM64 機は arm64、Intel/AMD 機は x64**。導入は同梱の README.md／install.ps1 を参照。未署名ゆゑ手元検証用。"
