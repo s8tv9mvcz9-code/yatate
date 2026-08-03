@@ -39,6 +39,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # **これが「導入できない配布物」を防ぐ関門である。**
+      # Windows PowerShell 5.1 は BOM 無しの .ps1 をシステム ANSI（CP932）として読む。
+      # すると日本語が化け、化けた二バイト文字が直後の `"` を食ひ潰して構文エラーになり、
+      # **DLL は無傷なのに install.ps1 が起動すらしない**。
+      # 症状（「文字化けした構文エラー」）から原因を辿るのは難しいので、機械で確かめる。
+      - name: install.ps1 が UTF-8 BOM 付きか
+        run: |
+          set -euo pipefail
+          head=$(head -c 3 windows/install.ps1 | od -An -tx1 | tr -d ' \n')
+          if [ "$head" != "efbbbf" ]; then
+            echo "::error file=windows/install.ps1::UTF-8 BOM が無い（PowerShell 5.1 が CP932 と誤読して構文エラーになる）"
+            exit 1
+          fi
+          echo "  ✓ UTF-8 BOM あり"
+
       - name: Rust の支度
         run: |
           rustup update stable --no-self-update
