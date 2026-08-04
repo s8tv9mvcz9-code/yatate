@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>矢立 — つかひかた</title>
+<meta name="description" content="矢立（文語 IME）のつかひかた。原器（縦組五十音配列）と二行配列、変換の手つき、五つの殻への導入。">
+<style>
+  :root {
+    --paper: #f7f4ec;
+    --sumi: #25221e;
+    --fringe: #6a6358;
+    --accent: #8a6b3d;
+    --edge: #ddd6c6;
+    --key: #fffdf8;
+    --warn: #8a3d3d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #14120f;
+      --sumi: #e8e2d6;
+      --fringe: #9a9184;
+      --accent: #c9a668;
+      --edge: #34302a;
+      --key: #1d1a16;
+      --warn: #d98a8a;
+    }
+  }
+  :root[data-theme="light"] {
+    --paper: #f7f4ec; --sumi: #25221e; --fringe: #6a6358;
+    --accent: #8a6b3d; --edge: #ddd6c6; --key: #fffdf8; --warn: #8a3d3d;
+  }
+  :root[data-theme="dark"] {
+    --paper: #14120f; --sumi: #e8e2d6; --fringe: #9a9184;
+    --accent: #c9a668; --edge: #34302a; --key: #1d1a16; --warn: #d98a8a;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--sumi);
+    font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
+    line-height: 1.9;
+    font-size: 17px;
+  }
+  .wrap { max-width: 46rem; margin: 0 auto; padding: 3rem 1.25rem 6rem; }
+
+  header { border-bottom: 1px solid var(--edge); padding-bottom: 1.5rem; margin-bottom: 2.5rem; }
+  h1 { font-size: 2.4rem; margin: 0 0 .3rem; letter-spacing: .12em; font-weight: 600; }
+  .sub { color: var(--fringe); font-size: .95rem; letter-spacing: .06em; margin: 0; }
+
+  h2 {
+    font-size: 1.35rem; margin: 3rem 0 1rem; padding-left: .7rem;
+    border-left: 4px solid var(--accent); letter-spacing: .08em; font-weight: 600;
+  }
+  h3 { font-size: 1.05rem; margin: 2rem 0 .6rem; letter-spacing: .06em; color: var(--accent); }
+  p { margin: .8rem 0; }
+  strong { font-weight: 700; }
+  a { color: var(--accent); }
+
+  .lead { font-size: 1.05rem; }
+  .note {
+    border: 1px solid var(--edge); background: var(--key);
+    padding: .9rem 1.1rem; border-radius: 6px; margin: 1.4rem 0;
+    font-size: .95rem;
+  }
+  .note.warn { border-color: var(--warn); }
+  .note.warn strong { color: var(--warn); }
+
+  pre {
+    background: var(--key); border: 1px solid var(--edge); border-radius: 6px;
+    padding: 1rem; overflow-x: auto; font-size: .9rem; line-height: 1.7;
+    font-family: "SFMono-Regular", Consolas, "Noto Sans Mono", monospace;
+  }
+  code { font-family: "SFMono-Regular", Consolas, "Noto Sans Mono", monospace; font-size: .92em; }
+  p code, li code, td code {
+    background: var(--key); border: 1px solid var(--edge);
+    padding: .05em .35em; border-radius: 3px;
+  }
+
+  .scroll { overflow-x: auto; margin: 1.2rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+  th, td { border: 1px solid var(--edge); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--key); font-weight: 600; }
+
+  /* 原器の図 */
+  .genki { display: flex; gap: 2.2rem; flex-wrap: wrap; margin: 1.2rem 0; }
+  .half { flex: 1 1 15rem; }
+  .half h4 { margin: 0 0 .5rem; font-size: .85rem; color: var(--fringe); font-weight: 500; letter-spacing: .1em; }
+  .krow { display: flex; gap: .35rem; margin-bottom: .35rem; }
+  .k {
+    flex: 1; min-width: 2.6rem; border: 1px solid var(--edge); background: var(--key);
+    border-radius: 5px; text-align: center; padding: .35rem .1rem .3rem;
+  }
+  .k .cap { display: block; font-size: .68rem; color: var(--fringe); font-family: monospace; }
+  .k .kana { display: block; font-size: 1.15rem; line-height: 1.4; }
+  .k.special { border-color: var(--accent); }
+  .k.special .kana { color: var(--accent); font-size: .95rem; }
+
+  ul, ol { padding-left: 1.4rem; }
+  li { margin: .35rem 0; }
+
+  footer {
+    margin-top: 5rem; padding-top: 1.5rem; border-top: 1px solid var(--edge);
+    color: var(--fringe); font-size: .85rem;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>矢立</h1>
+  <p class="sub">文語 IME —— つかひかた</p>
+</header>
+
+<p class="lead">
+矢立は<strong>文語（歴史的仮名遣ひ・旧字体）で書くための入力方式</strong>である。
+確定の瞬間に新字体は旧字体へ機械で直る——「国の学問」と打てば「國の學問」が出る。
+</p>
+
+<div class="note">
+  <strong>通信しない。</strong> どの殻も、打つた字を外へ送らない。
+  Android の殻は権限を一つも要求せず、web の殻に至つては
+  組み上がつた wasm に <code>import</code> が一つも無い（＝外の関数を呼べない）。
+  約束は作文ではなく、バイナリの性質として立ててある。
+</div>
+
+<h2>一、原器 —— 物理鍵盤で打つ</h2>
+
+<p>
+原器は<strong>縦組五十音配列</strong>である。右半面が縦書きの第一行で、
+<strong>段（あいうえお）が右から左へ</strong>進み、<strong>行（あ→か→さ）が上から下へ</strong>降りる。
+<code>j</code>（そ）まで書き切ると紙面の行を替へるやうに左半面へ折り返す。
+</p>
+
+<div class="genki">
+  <div class="half">
+    <h4>左半面 —— 第二の行</h4>
+    <div class="krow">
+      <div class="k"><span class="cap">1</span><span class="kana">と</span></div>
+      <div class="k"><span class="cap">2</span><span class="kana">て</span></div>
+      <div class="k"><span class="cap">3</span><span class="kana">つ</span></div>
+      <div class="k"><span class="cap">4</span><span class="kana">ち</span></div>
+      <div class="k"><span class="cap">5</span><span class="kana">た</span></div>
+    </div>
+    <div class="krow">
+      <div class="k"><span class="cap">q</span><span class="kana">の</span></div>
+      <div class="k"><span class="cap">w</span><span class="kana">ね</span></div>
+      <div class="k"><span class="cap">e</span><span class="kana">ぬ</span></div>
+      <div class="k"><span class="cap">r</span><span class="kana">に</span></div>
+      <div class="k"><span class="cap">t</span><span class="kana">な</span></div>
+    </div>
+    <div class="krow">
+      <div class="k"><span class="cap">a</span><span class="kana">ほ</span></div>
+      <div class="k"><span class="cap">s</span><span class="kana">へ</span></div>
+      <div class="k"><span class="cap">d</span><span class="kana">ふ</span></div>
+      <div class="k"><span class="cap">f</span><span class="kana">ひ</span></div>
+      <div class="k"><span class="cap">g</span><span class="kana">は</span></div>
+    </div>
+  </div>
+
+  <div class="half">
+    <h4>右半面 —— 第一の行</h4>
+    <div class="krow">
+      <div class="k"><span class="cap">6</span><span class="kana">お</span></div>
+      <div class="k"><span class="cap">7</span><span class="kana">え</span></div>
+      <div class="k"><span class="cap">8</span><span class="kana">う</span></div>
+      <div class="k"><span class="cap">9</span><span class="kana">い</span></div>
+      <div class="k"><span class="cap">0</span><span class="kana">あ</span></div>
+    </div>
+    <div class="krow">
+      <div class="k"><span class="cap">y</span><span class="kana">こ</span></div>
+      <div class="k"><span class="cap">u</span><span class="kana">け</span></div>
+      <div class="k"><span class="cap">i</span><span class="kana">く</span></div>
+      <div class="k"><span class="cap">o</span><span class="kana">き</span></div>
+      <div class="k"><span class="cap">p</span><span class="kana">か</span></div>
+    </div>
+    <div class="krow">
+      <div class="k"><span class="cap">j</span><span class="kana">そ</span></div>
+      <div class="k"><span class="cap">k</span><span class="kana">せ</span></div>
+      <div class="k"><span class="cap">l</span><span class="kana">す</span></div>
+      <div class="k"><span class="cap">;</span><span class="kana">し</span></div>
+      <div class="k"><span class="cap">:</span><span class="kana">さ</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="genki">
+  <div class="half">
+    <h4>面と逸らし</h4>
+    <div class="krow">
+      <div class="k special"><span class="cap">^</span><span class="kana">前置シフト</span></div>
+      <div class="k special"><span class="cap">^^</span><span class="kana">ん</span></div>
+      <div class="k special"><span class="cap">b</span><span class="kana">濁点</span></div>
+      <div class="k special"><span class="cap">v</span><span class="kana">半濁点</span></div>
+    </div>
+  </div>
+</div>
+
+<p>
+第二面（<code>^</code> を先に打つた後）は <strong>ま・や・ら・わ行</strong>。
+<strong>ゐ・ゑ が第一級の鍵を持つ</strong>（<code>^r</code>・<code>^w</code>）。
+「ん」は行にも段にも属さぬ唯一の仮名なので、前置シフトの重ね打ち <code>^^</code> に住む。
+濁点・半濁点は<strong>後置</strong>——「が」は <code>p</code> の後に <code>b</code>。
+</p>
+
+<pre>u d g ^y o 2 ^^ o t ^4  →  けふはよきてんきなり
+p b                     →  が　（か ＋ 濁点）
+^r  ^w                  →  ゐ　ゑ</pre>
+
+<div class="note warn">
+  <strong>英字（US）配列の機では刻印が違ふ。</strong>
+  <code>:</code>→<code>'</code>、<code>^</code>→<code>=</code> と読み替へる（<code>;</code> はそのまま）。
+  <strong>指の置き場は同じ</strong>である——矢立は刻印ではなく<strong>物理位置</strong>で鍵を引くので、
+  配列を選ばずそのまま打てる。
+</div>
+
+<h2>二、二行配列 —— 硝子で打つ</h2>
+
+<p>
+iOS・Android の画面鍵盤は、原器を硝子へ折り畳んだものである。
+行キーを 10 個だけ置き、<strong>段は書き下ろしのスライドで選ぶ</strong>。
+</p>
+
+<ul>
+  <li><strong>行を押す</strong> …… 押した位置が「あ段」</li>
+  <li><strong>縦に滑らせる</strong> …… 段が進む（あ→い→う→え→お）</li>
+  <li><strong>右へ逸らす</strong> …… 濁点（か→が）。字の右肩に打つものだから右である</li>
+  <li><strong>左へ逸らす</strong> …… 半濁点（は→ぱ）。は行だけが持つ</li>
+  <li><strong>指を離す</strong> …… その仮名が入る</li>
+</ul>
+
+<p>
+や行・わ行の空きスロットは<strong>詰めずに残してある</strong>。詰めると指の筋肉記憶が壊れるからで、
+ここでも ゐ・ゑ はわ行の第一級市民である。
+</p>
+
+<h2>三、変換 —— 漢字にする</h2>
+
+<p>
+<strong>Space は確定ではなく変換である。</strong>仮名のまま入れたいときは Enter で確定する
+（候補の最後尾には<strong>全部仮名の控へ</strong>が必ず残るので、変換してからでも辿り着ける）。
+</p>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>鍵</th><th>未変換のとき</th><th>変換中</th></tr></thead>
+  <tbody>
+    <tr><td><code>Space</code></td><td><strong>変換する</strong></td><td>次の候補へ</td></tr>
+    <tr><td><code>Enter</code></td><td>仮名のまま確定</td><td>選んだ形で確定</td></tr>
+    <tr><td><code>Esc</code></td><td>捨てる</td><td>変換を解いて仮名へ戻す（<strong>読みは失はない</strong>）</td></tr>
+    <tr><td><code>BackSpace</code></td><td>一字消す</td><td>同上（消さずに解く）</td></tr>
+    <tr><td><code>←</code> <code>→</code></td><td>—</td><td>注目する文節を移す</td></tr>
+    <tr><td><code>Shift+←</code> <code>Shift+→</code></td><td>—</td><td>注目文節を縮める／伸ばす</td></tr>
+    <tr><td><code>↑</code> <code>↓</code></td><td>—</td><td>前の／次の候補へ</td></tr>
+  </tbody>
+</table>
+</div>
+
+<pre>u d g ^y o 2 ^^ o t ^4  Space  Enter  →  今日は良き天氣なり
+u d g ^y o 2 ^^ o t ^4         Enter  →  けふはよきてんきなり</pre>
+
+<p>
+<strong>旧字は確定の瞬間だけ掛かる。</strong>辞書は新字体で持つてゐるので、候補を並べてゐる間の
+表記も新字体のままである（「天気」→ 確定して「天氣」）。同じ知識を二か所に置かないための作法である。
+</p>
+
+<h2>四、入れる</h2>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>殻</th><th>鍵盤</th><th>変換</th><th>入れ方</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Windows</strong><br><span style="color:var(--fringe);font-size:.85em">TSF</span></td>
+      <td>原器（物理）</td><td>◯</td>
+      <td>Releases の <code>windows-latest</code> から機械の種別に合つた zip を取り、
+          管理者の PowerShell で <code>.\install.ps1</code>。
+          <code>Win+Space</code> で切り替へる</td>
+    </tr>
+    <tr>
+      <td><strong>Android</strong><br><span style="color:var(--fringe);font-size:.85em">IMS</span></td>
+      <td>二行配列 ＋ 外付け鍵盤</td><td>◯</td>
+      <td>APK を入れ、設定 → システム → 言語と入力 → 画面キーボード で有効にする</td>
+    </tr>
+    <tr>
+      <td><strong>web</strong><br><span style="color:var(--fringe);font-size:.85em">wasm</span></td>
+      <td>原器（物理）</td><td>◯</td>
+      <td>頁を開くだけ。手で直した漢字を覚え、次から候補に出す（<code>localStorage</code> のみ）</td>
+    </tr>
+    <tr>
+      <td><strong>macOS</strong><br><span style="color:var(--fringe);font-size:.85em">IMKit</span></td>
+      <td>原器（物理・英字配列）</td><td>—</td>
+      <td><code>~/Library/Input Methods/</code> へ置き、ログインし直してから
+          システム設定 → キーボード → 入力ソース で足す</td>
+    </tr>
+    <tr>
+      <td><strong>iOS</strong></td>
+      <td>二行配列／原器（外付け）</td><td>—</td>
+      <td>本体アプリの「原器」タブで外付け鍵盤を試せる。
+          キーボード拡張は<strong>ハードキーを受け取れない</strong>ので、
+          原器の入口は本体アプリにしか置けない</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note">
+  macOS と iOS に変換がまだ無いのは、変換の頭脳が Rust の核に在り、
+  Swift 側へ手で写すと<strong>四枚目の地図</strong>になるからである。
+  Windows・Android・web はいづれも核をそのまま呼んでゐる
+  （リンク・JNI・wasm）。Swift 二殻も同じ道を通す予定である。
+</div>
+
+<h2>五、うまくいかないとき</h2>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>症状</th><th>見るところ</th></tr></thead>
+  <tbody>
+    <tr><td>一覧に出てこない（Windows）</td><td>管理者で入れたか／機械と DLL の種別（ARM64 対 x64）が合つてゐるか</td></tr>
+    <tr><td>入力ソースに出ない（macOS）</td><td><code>~/Library/Input Methods/</code> に在るか／ログインし直したか</td></tr>
+    <tr><td><code>^</code> や <code>=</code> がそのまま入る</td><td>前置シフトの打鍵を殻が食ひ損ねてゐる</td></tr>
+    <tr><td>「し」と打つと「さ」が出る</td><td>出る字（刻印）で引いてゐる経路が混ざつてゐる。矢立は物理位置で引く</td></tr>
+    <tr><td>一部のアプリだけ動かない（Windows）</td><td>そのアプリが TSF でなく IMM32 を使つてゐる可能性</td></tr>
+  </tbody>
+</table>
+</div>
+
+<footer>
+  <p>
+    矢立は MIT ライセンスで公開してゐる。
+    設計と実装は <a href="https://github.com/s8tv9mvcz9-code/yatate">GitHub</a> に在る。
+  </p>
+  <p>
+    原器は使用者が約 10 年使ひ込んできた自作配列であり、
+    記号・小書き（ゃゅょっ）の打ち方は<strong>未定</strong>である——
+    未定のものを勝手に決めると、原器が原器でなくなるので、実装しない。
+  </p>
+</footer>
+
+</div>
+</body>
+</html>

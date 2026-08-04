@@ -1,0 +1,59 @@
+name: Pages
+
+# つかひかたの頁（`site/`）を GitHub Pages へ出す。
+#
+# 静的な一枚だけなので組む段は無い。ubuntu 一本（課金 1 倍）で、
+# 他の関門と競合しない。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 頁は一枚しか無いので、走りを重ねない。ただし途中で切ると
+# 中途半端な頁が残り得るので、進行中は取り消さない。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: つかひかたを出す
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # `enablement: true` が Pages 自体を有効にする（未設定でも初回から通る）
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: 頁が壊れてゐないか
+        run: |
+          set -e
+          test -f site/index.html || { echo "::error::site/index.html が無い"; exit 1; }
+          # 外部への読み込みが混ざつてゐないこと。
+          # 「通信しない」を謳ふ頁が外部の資源を引いてゐては話にならない。
+          if grep -Eiq '<(script|link)[^>]+(src|href)="https?:' site/index.html; then
+            echo "::error::外部の資源を引いてゐる（頁は自己完結であること）"
+            exit 1
+          fi
+          echo "OK: $(stat -c%s site/index.html) バイト・自己完結"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
