@@ -374,6 +374,37 @@ fn 区切り修正のベクトルが核と一致する() {
     }
 }
 
+/// 鍵の物理位置 — **web と Windows の二つの殻が従ふ一枚の地図**。
+///
+/// このベクトルが古くなると、二つの殻が違ふ位置を指しはじめる。
+/// とくに配列で意味の変はる三鍵（さ・し・前置シフト）は、ずれても
+/// 例外も警告も出ずに黙つて違ふ字が出るので、ここで名指しして縛る。
+#[test]
+fn 鍵の位置のベクトルが核と一致する() {
+    use yatate_core::kagi;
+
+    let v = load("kagi.json");
+    let keys = v["keys"].as_array().expect("keys");
+    assert!(!keys.is_empty(), "keys が空（ゲートが無効化されてゐる）");
+    assert_eq!(keys.len(), kagi::KAGI.len(), "鍵の数");
+
+    for case in keys {
+        let genki = case["genki"]
+            .as_str()
+            .expect("genki")
+            .chars()
+            .next()
+            .unwrap();
+        let code = case["code"].as_str().expect("code");
+        let scan = case["scan"].as_u64().expect("scan") as u16;
+
+        assert_eq!(kagi::genki_of_code(code), Some(genki), "{code} → 原器");
+        assert_eq!(kagi::genki_of_scan(scan), Some(genki), "{scan:#04X} → 原器");
+        assert_eq!(kagi::code_of(genki), Some(code), "{genki} → code");
+        assert_eq!(kagi::scan_of(genki), Some(scan), "{genki} → 走査符号");
+    }
+}
+
 #[test]
 fn 原器のベクトルが核と一致する() {
     use yatate_core::genki::{self, type_keys, Genki};

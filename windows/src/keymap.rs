@@ -245,6 +245,47 @@ mod tests {
         assert_eq!(genki_char(VK_OEM_7, 0), Some('^'));
     }
 
+    /// **核の地図に従ふ。**
+    ///
+    /// web の殻（`web/`）も同じ「物理位置 → 原器」の地図を要るので、
+    /// 出所を核（`yatate_core::kagi`）へ一本化した。地図を二枚持てば
+    /// 放つておいて必ずずれる——このリポジトリが繰り返し学んできたことである。
+    /// ここは Windows 側の写しが核から外れてゐないかを見る番人で、
+    /// web 側は核の表をそのまま使ふので写し自体を持たない。
+    #[test]
+    fn 核の鍵の地図と食ひ違はない() {
+        use yatate_core::kagi;
+
+        // ① 配列で意味の変はる三鍵が、核と同じ物理位置を指してゐること。
+        //    ここがずれると実機で黙つて違ふ字が出る（例外も警告も出ない）。
+        for c in [':', ';', '^'] {
+            assert_eq!(
+                scan_of(c),
+                kagi::scan_of(c),
+                "'{c}' の走査符号が核と食ひ違ふ"
+            );
+        }
+
+        // ② 鍵の数が合ふこと（片方にだけ鍵が増えるのを捕まへる）
+        assert_eq!(
+            kagi::KAGI.len(),
+            UNIVERSAL_TABLE.len() + POSITIONAL_TABLE.len(),
+            "核と Windows で原器の鍵数が違ふ"
+        );
+
+        // ③ 核が知る 33 鍵すべてが、Windows の殻でも同じ文字へ写ること
+        for k in kagi::KAGI.iter() {
+            let (vk, sc) = as_keystroke(k.genki);
+            assert_eq!(
+                genki_char(vk, sc),
+                Some(k.genki),
+                "核の {}（'{}'）が Windows の殻で引けない",
+                k.code,
+                k.genki
+            );
+        }
+    }
+
     #[test]
     fn 機能キーは原器の領分でない() {
         for vk in [

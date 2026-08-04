@@ -1,0 +1,30 @@
+[package]
+name = "yatate-web"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "矢立の web 殻（wasm）— 鍵盤だけを web に出し、手修正を覚える"
+license = "MIT"
+repository = "https://github.com/s8tv9mvcz9-code/yatate"
+
+[lib]
+name = "yatate_web"
+# wasm は cdylib で出す。JS からは素の関数として見える。
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+# 決定的核。原器も氣配も旧字確定も辞書も、ここから来る（殻は描くだけ）。
+yatate-core = { path = "../core" }
+
+# **wasm-bindgen を使はない。**
+#
+# 核の入出力は「文字を入れる／文字列を貰ふ」だけなので、素の `extern "C"` で足りる。
+# おかげで道具立ては cargo だけで済み、CI は ubuntu（課金 1 倍）のまま増えない
+# ——`wasm-pack` も `npm` も要らない（docs/ime/web.md §2）。
+
+[profile.release]
+# 頁の読み込みに乗るので、速度より大きさを優先する（拡張・DLL と同じ判断）。
+opt-level = "z"
+lto = true
+strip = true
+panic = "abort"

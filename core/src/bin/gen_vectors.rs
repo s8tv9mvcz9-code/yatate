@@ -360,6 +360,32 @@ fn bunsetsu_vectors() -> String {
     out
 }
 
+/// 鍵の物理位置 — **殻をまたぐ地図**。
+///
+/// web の殻は核の表をそのまま使ひ、Windows の殻は自分の表をこれに照合する。
+/// 同じ地図を二枚持つと放つておいて必ずずれる、といふのがこのファイルの前提である。
+fn kagi_vectors() -> String {
+    use yatate_core::kagi::KAGI;
+
+    let mut out = String::from(
+        "{\n \"_comment\": \"自動生成（cargo run --bin gen-vectors）— 手で編集しないこと。\
+核（core/src/kagi.rs）が鍵の物理位置の SSOT である。\",\n \"source\": \"core/src/kagi.rs\",\n",
+    );
+    let rows: Vec<String> = KAGI
+        .iter()
+        .map(|k| {
+            format!(
+                "  {{\"genki\": \"{}\", \"code\": \"{}\", \"scan\": {}}}",
+                esc(&k.genki.to_string()),
+                esc(k.code),
+                k.scan
+            )
+        })
+        .collect();
+    let _ = write!(out, " \"keys\": [\n{}\n ]\n}}\n", rows.join(",\n"));
+    out
+}
+
 fn main() {
     let dir: PathBuf = [env!("CARGO_MANIFEST_DIR"), "vectors"].iter().collect();
     fs::create_dir_all(&dir).expect("vectors/ を作れない");
@@ -368,6 +394,7 @@ fn main() {
         ("kehai.json", kehai_vectors()),
         ("genki.json", genki_vectors()),
         ("bunsetsu.json", bunsetsu_vectors()),
+        ("kagi.json", kagi_vectors()),
     ] {
         let path = dir.join(name);
         fs::write(&path, body).unwrap_or_else(|e| panic!("{}: {e}", path.display()));

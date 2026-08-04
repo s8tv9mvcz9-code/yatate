@@ -35,6 +35,7 @@ IME が「アプリ」ではなく **OS の入力機構に嵌め込まれる部�
 | Windows | Text Services Framework（TSF）の TIP | **文字を受け取る全アプリのプロセスへ読み込まれる in-proc COM DLL**。COM 登録（`ITfInputProcessorProfiles::Register`）が要る |
 | Android | `InputMethodService` | サービスとして常駐。3 者の中では最も制約が緩い |
 | Linux | Fcitx5 / IBus | エンジンプラグイン（C API）。別プロセス |
+| **web** | 頁の中の編輯欄 | OS の入力機構に**嵌まらない**。他のアプリへは出られない代はり、殻の制約が最も緩い（[web.md](./web.md)） |
 
 Windows の一行が決定的である。TIP は **Word にも Chrome にもメモ帳にも読み込まれる DLL** で、
 そこに Flutter や Electron のランタイムを持ち込むことは物理的にも道義的にも不可能に近い。
@@ -367,6 +368,7 @@ M0〜M4 は [roadmap.md](./roadmap.md) の通り（iOS）。本書はその先�
 | **M6 macOS** | IMKit 殻（Swift）。**配列は核の `genki` を呼ぶだけ**（実装済み）。Developer ID 署名＋notarize の配布経路 | 自分の Mac で常用でき、原器がそのまま打てる |
 | **M7-a Windows の骨組み**（**済**） | `windows/` に TSF 殻の枠。`session`（OS 非依存の頭脳）＋ `registration`（登録の値）＋ `tip`（COM の入口）。ubuntu で test / clippy / fmt ＋ `--target x86_64-pc-windows-gnu` の型検査 | ✅ `cargo test` 11 件 green・Windows ターゲットで check 通過 |
 | **M7-b Windows の実装**（**機械検証まで済・実機待ち**） | クラスファクトリ・DLL エクスポート・レジストリ登録・`ITfKeyEventSink`・`ITfComposition`。**JIS 物理鍵盤の翻訳（`keymap`）を新設**し、配列で意味の変はる 3 鍵を走査符号で引く。x64/ARM64 の配布物を CI が組む | ✅ `cargo test` 18 件・実 DLL のリンク・**エクスポート表の検査**が green。**残るは実機で打つこと**（候補窓・署名は未了） |
+| **W web 殻**（**済**） | `web/`（wasm）。核を素の `extern "C"` で出し、`KeyboardEvent.code` で原器を打つ。鍵の物理位置は核の `kagi` へ一本化し、Windows 殻と一枚の地図を共有する。手修正を `localStorage` へ覚える | ✅ `cargo test` 13 件・wasm の出口検査・**import が一つも無いこと**の検査が green。実ブラウザで打鍵→変換→学習まで通した |
 | **M8 Android** | IMS 殻（Kotlin）＋uniffi Kotlin 束縛。二行配列は iOS の写し | iOS と同等の手数 |
 | **M9 同期** | 設定・辞書・学習の JSON スキーマと書き出し／読み込み | 端末を替へても稽古の蓄積が続く |
 

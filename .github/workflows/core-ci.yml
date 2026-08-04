@@ -14,6 +14,7 @@ on:
     paths:
       - "core/**"
       - "windows/**"
+      - "web/**"
       - "ssot/**"
       - "scripts/gen_rust_tables.py"
       - "scripts/gen_bigram_tables.py"
@@ -25,6 +26,7 @@ on:
     paths:
       - "core/**"
       - "windows/**"
+      - "web/**"
       - "ssot/**"
       - "scripts/gen_rust_tables.py"
       - "scripts/gen_bigram_tables.py"
@@ -138,3 +140,47 @@ jobs:
       - name: cargo check（x86_64-pc-windows-gnu）
         working-directory: windows
         run: cargo check --target x86_64-pc-windows-gnu
+
+  # web の殻（wasm）— **ubuntu で全部見る**（課金 1 倍）。
+  #
+  # 核の入出力は「文字を入れる／文字列を貰ふ」だけなので wasm-bindgen が要らず、
+  # 道具立ては cargo と python3 だけで済む（docs/ime/web.md §2）。
+  # ブラウザは要らない——頁に頭脳が無いので、試験する対象がすべて Rust 側にある。
+  web-shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Rust ツールチェーン（wasm ターゲットつき）
+        run: |
+          rustup toolchain install stable --profile minimal \
+            --component rustfmt --component clippy
+          rustup default stable
+          rustup target add wasm32-unknown-unknown
+
+      # C ABI・code からの打鍵・学習の助け。host で回るので速い。
+      - name: cargo test
+        working-directory: web
+        run: cargo test --all-targets
+
+      - name: cargo clippy / fmt
+        working-directory: web
+        run: |
+          cargo clippy --all-targets -- -D warnings
+          cargo fmt --check
+
+      - name: wasm を組む
+        working-directory: web
+        run: cargo build --release --target wasm32-unknown-unknown
+
+      # 組み上がつた物を検める。二つ見る:
+      #   ① 出口が揃つてゐるか  — #[no_mangle] の書き忘れは頁が黙つて死ぬ
+      #   ② import が一つも無いか — 「通信するコードを持たない」約束の実体
+      #                             （docs/privacy.md §3-2）
+      - name: wasm を検める（出口と、import が無いこと）
+        working-directory: web
+        run: python3 check_wasm.py
