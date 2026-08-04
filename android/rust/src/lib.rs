@@ -452,7 +452,7 @@ mod tests {
         let cands: Vec<&str> = joined.split('\n').collect();
         assert!(cands.len() > 1, "控へを含めて二つ以上ある");
         assert!(
-            cands.iter().any(|c| *c == "けふは"),
+            cands.contains(&"けふは"),
             "全部仮名の控へが残つてゐる: {cands:?}"
         );
     }
