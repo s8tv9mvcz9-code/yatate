@@ -346,7 +346,10 @@ mod tests {
     /// その中身が機械全体のレジストリへ書き出される。
     #[test]
     fn tsf_へ渡す文字列は終端を持ち長さは終端を含めない() {
-        for s in [PROFILE_DESCRIPTION, "C:\\Program Files\\Yatate\\yatate_windows.dll"] {
+        for s in [
+            PROFILE_DESCRIPTION,
+            "C:\\Program Files\\Yatate\\yatate_windows.dll",
+        ] {
             let buf = wide_nul(s);
             assert_eq!(*buf.last().unwrap(), 0, "終端が無い: {s}");
 
