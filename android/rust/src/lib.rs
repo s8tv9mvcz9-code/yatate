@@ -122,11 +122,7 @@ impl Bridge {
 pub fn gojuon_tsv() -> String {
     let mut out = String::new();
     for gyo in gojuon::all() {
-        for (plane, slots) in [
-            ("sei", Some(gyo.seion)),
-            ("daku", gyo.daku),
-            ("ko", gyo.ko),
-        ] {
+        for (plane, slots) in [("sei", Some(gyo.seion)), ("daku", gyo.daku), ("ko", gyo.ko)] {
             let Some(slots) = slots else { continue };
             out.push_str(gyo.name);
             out.push('\t');
@@ -145,7 +141,11 @@ pub fn gojuon_tsv() -> String {
 pub fn lines_tsv() -> String {
     let first: Vec<&str> = gojuon::FIRST_LINE.iter().map(|g| g.name).collect();
     let second: Vec<&str> = gojuon::SECOND_LINE.iter().map(|g| g.name).collect();
-    format!("first\t{}\nsecond\t{}\n", first.join("\t"), second.join("\t"))
+    format!(
+        "first\t{}\nsecond\t{}\n",
+        first.join("\t"),
+        second.join("\t")
+    )
 }
 
 // ── ここから下は Android でしか意味を持たない ─────────────────
