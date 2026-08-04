@@ -448,7 +448,8 @@ mod tests {
         let mut b = typed("udg^yo2^^ot^4");
         let act = b.henkan_mut().convert();
         b.absorb(act);
-        let cands: Vec<&str> = b.candidates().split('\n').collect();
+        let joined = b.candidates();
+        let cands: Vec<&str> = joined.split('\n').collect();
         assert!(cands.len() > 1, "控へを含めて二つ以上ある");
         assert!(
             cands.iter().any(|c| *c == "けふは"),
