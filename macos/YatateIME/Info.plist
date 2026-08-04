@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>ja</string>
+	<key>CFBundleDisplayName</key>
+	<string>矢立（文語 IME）</string>
+	<key>CFBundleExecutable</key>
+	<string>YatateIME</string>
+	<key>CFBundleIdentifier</key>
+	<string>jp.yatate.inputmethod</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>YatateIME</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>LSBackgroundOnly</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>MIT License</string>
+
+	<!-- IMKit — OS と繋ぐ名と、入力欄ごとに作られる制御子 -->
+	<key>InputMethodConnectionName</key>
+	<string>jp.yatate.inputmethod_Connection</string>
+	<key>InputMethodServerControllerClass</key>
+	<string>YatateInputController</string>
+
+	<!-- 扱ふ文字体系。日本語（漢字・仮名）である -->
+	<key>tsInputMethodCharacterRepertoireKey</key>
+	<array>
+		<string>Jpan</string>
+	</array>
+
+	<!-- 入力ソース一覧に出す一つの入力方式 -->
+	<key>ComponentInputModeDict</key>
+	<dict>
+		<key>tsInputModeListKey</key>
+		<dict>
+			<key>jp.yatate.inputmethod.Japanese</key>
+			<dict>
+				<key>TISInputSourceID</key>
+				<string>jp.yatate.inputmethod.Japanese</string>
+				<key>TISIntendedLanguage</key>
+				<string>ja</string>
+				<key>tsInputModeCharacterRepertoireKey</key>
+				<array>
+					<string>Jpan</string>
+				</array>
+				<key>tsInputModeIsVisibleKey</key>
+				<true/>
+				<key>tsInputModeKeyEquivalentModifiersKey</key>
+				<integer>0</integer>
+				<key>tsInputModePrimaryInScriptKey</key>
+				<true/>
+				<key>tsInputModeScriptKey</key>
+				<string>smJapanese</string>
+			</dict>
+		</dict>
+		<key>tsVisibleInputModeOrderedArrayKey</key>
+		<array>
+			<string>jp.yatate.inputmethod.Japanese</string>
+		</array>
+	</dict>
+</dict>
+</plist>
