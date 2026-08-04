@@ -189,7 +189,10 @@ jobs:
               --notes "main の最新。導入は android/README.md 参照。" || \
             gh release view android-latest --repo "$GITHUB_REPOSITORY" >/dev/null
           gh release upload android-latest yatate-android.apk --clobber --repo "$GITHUB_REPOSITORY"
-          gh release edit android-latest --repo "$GITHUB_REPOSITORY" \
-            --notes "main の最新（commit: ${GITHUB_SHA}）。arm64-v8a ／ x86_64 の両方を含む。
-
-**未署名の debug ビルド**ゆゑ手元検証用。入れたあと 設定 → システム → 言語と入力 → 画面キーボード で「矢立（文語 IME）」を有効にすること。打ち方は https://s8tv9mvcz9-code.github.io/yatate/ を参照。"
+          # 改行は printf で作る。YAML のブロック内で桁 0 から書き始めると
+          # ブロックを抜けて**ファイルごと構文エラー**になり、ジョブが一つも走らない。
+          notes=$(printf '%s\n\n%s\n\n%s\n' \
+            "main の最新（commit: ${GITHUB_SHA}）。arm64-v8a ／ x86_64 の両方を含む。" \
+            "**未署名の debug ビルド**ゆゑ手元検証用。入れたあと 設定 → システム → 言語と入力 → 画面キーボード で「矢立（文語 IME）」を有効にすること。" \
+            "打ち方は https://s8tv9mvcz9-code.github.io/yatate/ を参照。")
+          gh release edit android-latest --repo "$GITHUB_REPOSITORY" --notes "$notes"
