@@ -302,8 +302,8 @@ mod tests {
     #[test]
     fn 機能キーは原器の領分でない() {
         for vk in [
-            VK_BACK, VK_RETURN, VK_ESCAPE, VK_SPACE, VK_SHIFT, VK_CONTROL, VK_MENU, VK_LEFT,
-            VK_UP, VK_RIGHT, VK_DOWN,
+            VK_BACK, VK_RETURN, VK_ESCAPE, VK_SPACE, VK_SHIFT, VK_CONTROL, VK_MENU, VK_LEFT, VK_UP,
+            VK_RIGHT, VK_DOWN,
         ] {
             assert!(
                 !is_genki_key(vk, 0),

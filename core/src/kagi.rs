@@ -181,8 +181,14 @@ mod tests {
                 scan_of(*key).is_some(),
                 "第一面 '{key}'（{kana}）に走査符号が無い"
             );
-            assert!(mac_of(*key).is_some(), "第一面 '{key}'（{kana}）に kVK が無い");
-            assert!(hid_of(*key).is_some(), "第一面 '{key}'（{kana}）に HID が無い");
+            assert!(
+                mac_of(*key).is_some(),
+                "第一面 '{key}'（{kana}）に kVK が無い"
+            );
+            assert!(
+                hid_of(*key).is_some(),
+                "第一面 '{key}'（{kana}）に HID が無い"
+            );
         }
         // 第二面は同じ鍵を前置シフト後に打つだけなので、表は一つで足りる
         for (key, kana) in SECOND_PLANE.iter() {
