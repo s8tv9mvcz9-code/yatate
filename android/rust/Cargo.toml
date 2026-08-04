@@ -1,0 +1,34 @@
+[package]
+name = "yatate-android"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "矢立の Android 殻の橋（JNI）— docs/ime/cross-platform.md M8"
+license = "MIT"
+repository = "https://github.com/s8tv9mvcz9-code/yatate"
+
+[lib]
+name = "yatate_android"
+# Android は共有ライブラリとして `System.loadLibrary` で読む。
+# `lib` も出すのは、ホスト（ubuntu）で `cargo test` を回すため。
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+# 決定的核。原器も氣配も旧字確定も辞書も変換も、ここから来る（殻は描くだけ）。
+#
+# **Android は Swift 二殻と違ひ、核を手で写さない。** JNI で Rust をそのまま呼ぶので、
+# henkan・bunsetsu・jisho（約 900 行）が初日から丸ごと載る——
+# 四枚目の地図を作らずに済む唯一の道である（docs/ime/cross-platform.md §5 案 A）。
+yatate-core = { path = "../../core" }
+
+# JNI の作法だけを引き受ける。uniffi は使はない——核の入出力は
+# 「文字を入れる／文字列を貰ふ」だけなので、生成器を挟む必要が無い
+# （web が wasm-bindgen を使はないのと同じ判断）。
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+
+[profile.release]
+# 端末へ配るので速度より大きさを優先する（拡張・DLL・wasm と同じ判断）。
+opt-level = "z"
+lto = true
+strip = true

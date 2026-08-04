@@ -179,6 +179,24 @@ impl Henkan {
         }
     }
 
+    /// 仮名を**直に**積む（硝子の鍵盤用。二行配列は原器の写像を経ない）。
+    ///
+    /// 物理鍵盤の [`Self::key`] と同じく、変換中なら先に確定させてから積む。
+    pub fn insert_kana(&mut self, kana: &str) -> Act {
+        if kana.is_empty() {
+            return Act::Swallow;
+        }
+        if self.phase == Phase::Henkan {
+            let text = self.take_commit();
+            self.session.insert_kana(kana);
+            return Act::CommitThenUpdate(text);
+        }
+        match self.session.insert_kana(kana) {
+            KeyAction::Update => Act::Update,
+            _ => Act::Swallow,
+        }
+    }
+
     /// Space —— 未変換なら**変換し**、変換中なら**次の候補へ**。
     pub fn convert(&mut self) -> Act {
         match self.phase {
@@ -584,6 +602,45 @@ mod tests {
     fn 仮名のまま確定すれば旧字だけが掛かる() {
         let mut h = typed(HARE);
         assert_eq!(h.commit(), Act::Commit("けふはよきてんきなり".to_string()));
+    }
+
+    /// 硝子の鍵盤は仮名を直に積む（原器の写像を経ない）。
+    #[test]
+    fn 硝子から仮名を直に積める() {
+        let mut h = Henkan::new();
+        for kana in ["け", "ふ", "は", "よ", "き", "て", "ん", "き", "な", "り"] {
+            assert_eq!(h.insert_kana(kana), Act::Update);
+        }
+        assert_eq!(h.preedit(), "けふはよきてんきなり");
+        h.convert();
+        assert_eq!(h.commit(), Act::Commit("今日は良き天氣なり".to_string()));
+    }
+
+    #[test]
+    fn 硝子の仮名も変換中なら先に確定させる() {
+        let mut h = typed(HARE);
+        h.convert();
+        let act = h.insert_kana("あ");
+        assert_eq!(act, Act::CommitThenUpdate("今日は良き天氣なり".to_string()));
+        assert_eq!(h.preedit(), "あ");
+    }
+
+    #[test]
+    fn 空の仮名は何も起こさない() {
+        let mut h = Henkan::new();
+        assert_eq!(h.insert_kana(""), Act::Swallow);
+        assert!(!h.is_composing());
+    }
+
+    /// 硝子には前置シフトが無い。物理鍵盤で立てたシフトを持ち越さない。
+    #[test]
+    fn 硝子の仮名は前置シフトを降ろす() {
+        let mut h = Henkan::new();
+        h.key('^');
+        assert!(h.is_shifted());
+        h.insert_kana("さ");
+        assert!(!h.is_shifted(), "硝子へ移つたらシフトは降りる");
+        assert_eq!(h.preedit(), "さ");
     }
 
     #[test]

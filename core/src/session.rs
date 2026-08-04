@@ -83,6 +83,23 @@ impl Session {
         }
     }
 
+    /// 仮名を**直に**積む（硝子の鍵盤用）。
+    ///
+    /// 二行配列（iOS・Android）は行を押して段へ滑らせるので、**指が離れた時点で
+    /// 既に仮名が決まつてゐる**——原器の「鍵の文字 → 仮名」の写像を経ない。
+    /// 濁音・半濁音も逸らしで直に出るので、後置打鍵も通らない。
+    ///
+    /// 硝子には前置シフトが無いので、ここで立つてゐたシフトは降ろす
+    /// （物理鍵盤と硝子を行き来したときに持ち越さないため）。
+    pub fn insert_kana(&mut self, kana: &str) -> KeyAction {
+        if kana.is_empty() {
+            return KeyAction::Swallow;
+        }
+        self.genki.reset();
+        self.composer.append(kana);
+        KeyAction::Update
+    }
+
     /// この鍵を矢立が受け取るべきか（TSF の `OnTestKeyDown` が先に尋ねてくる）。
     ///
     /// 未確定文字列がある間は、原器に無い鍵も**一旦は受ける**
