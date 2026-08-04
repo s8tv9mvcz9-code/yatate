@@ -71,6 +71,38 @@ pub fn inproc_key_path() -> String {
     format!("CLSID\\{CLSID_YATATE_TEXT_SERVICE}\\InprocServer32")
 }
 
+/// UTF-16 の緩衝を **NUL 終端付き**で作る。
+///
+/// `ITfInputProcessorProfiles::AddLanguageProfile` は文字列と長さを別々に受け取るが、
+/// **実機の TSF はアイコンの道を `wcslen` で読む**。終端の無い緩衝を渡すと隣の
+/// 解放済みヒープまで読み進み、その中身が機械全体の
+/// `HKLM\SOFTWARE\Microsoft\CTF\TIP\{CLSID}\LanguageProfile\…\IconFile` へ
+/// 書き出される。
+///
+/// 2026-08-04 に ARM64 実機で観測した実害:
+///
+/// ```text
+///   期待 42 字: C:\Program Files\Yatate\yatate_windows.dll
+///   実際 69 字: C:\Program Files\Yatate\yatate_windows.dllCF-EE776BCD5EE9}\Inpr…
+///                                                         ^^^ 直前に作つた
+///                                                         InprocServer32 鍵の道の残骸
+/// ```
+///
+/// 同じ呼びの `Description` は長さちやうどで正しかつたので、長さを守る引数と
+/// 守らない引数が混在してゐる。**両方に正しく見える形**（終端を持たせ、
+/// 長さは終端を含めない）で渡すのが唯一安全な渡し方である。
+pub fn wide_nul(s: &str) -> Vec<u16> {
+    s.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+/// [`wide_nul`] の緩衝から「終端を含まない長さ」の切片を取る。
+///
+/// 長さを守る実装にはこの切片の長さが、`wcslen` する実装には切片の直後に在る
+/// NUL が効く。
+pub fn wide_body(buf: &[u16]) -> &[u16] {
+    &buf[..buf.len().saturating_sub(1)]
+}
+
 // ── ここから下は Windows でしか意味を持たない ─────────────────
 #[cfg(windows)]
 mod imp {
@@ -164,8 +196,10 @@ mod imp {
         // ② 入力プロファイル: TSF へ「日本語の鍵盤がここに居る」と名乗る
         let clsid = clsid();
         let profile = profile_guid();
-        let desc: Vec<u16> = PROFILE_DESCRIPTION.encode_utf16().collect();
-        let dll_wide: Vec<u16> = dll.encode_utf16().collect();
+        // **NUL 終端を持たせる**（理由は `wide_nul` の説明を見よ——
+        // 終端が無いと解放済みヒープが機械全体のレジストリへ漏れる）。
+        let desc = wide_nul(PROFILE_DESCRIPTION);
+        let dll_wide = wide_nul(&dll);
 
         // SAFETY: CoCreateInstance は TSF の標準オブジェクトを作る。以降の呼びは
         // すべて有効な参照・長さを渡してゐる。
@@ -177,8 +211,8 @@ mod imp {
                 &clsid,
                 LANGID_JA_JP,
                 &profile,
-                &desc,
-                &dll_wide,
+                wide_body(&desc),
+                wide_body(&dll_wide),
                 0, // アイコンの索引（DLL にアイコンを持たせたら差し替へる）
             )?;
 
@@ -303,6 +337,43 @@ mod tests {
         assert!(clsid_key_path().contains(CLSID_YATATE_TEXT_SERVICE));
         assert!(inproc_key_path().ends_with("InprocServer32"));
         assert!(inproc_key_path().starts_with(&clsid_key_path()));
+    }
+
+    /// **実機で見つけた瑕の関門。**
+    ///
+    /// TSF へ渡す文字列は「終端を持ち、長さは終端を含めない」の両方でなければ
+    /// ならない。片方でも欠けると、長さを守らない実装が解放済みヒープまで読み進み、
+    /// その中身が機械全体のレジストリへ書き出される。
+    #[test]
+    fn tsf_へ渡す文字列は終端を持ち長さは終端を含めない() {
+        for s in [PROFILE_DESCRIPTION, "C:\\Program Files\\Yatate\\yatate_windows.dll"] {
+            let buf = wide_nul(s);
+            assert_eq!(*buf.last().unwrap(), 0, "終端が無い: {s}");
+
+            let body = wide_body(&buf);
+            assert_eq!(
+                body.len(),
+                s.encode_utf16().count(),
+                "渡す長さが終端を含んでゐる: {s}"
+            );
+            assert!(!body.contains(&0), "本体に NUL が混ざつてゐる: {s}");
+            assert_eq!(
+                String::from_utf16_lossy(body),
+                s,
+                "往復しない（文字が落ちてゐる）: {s}"
+            );
+            // 本体の直後が NUL であること＝`wcslen` する実装にも正しく見える
+            assert_eq!(buf[body.len()], 0, "本体の直後が終端でない: {s}");
+        }
+    }
+
+    #[test]
+    fn 空文字列でも壊れない() {
+        let buf = wide_nul("");
+        assert_eq!(buf, vec![0]);
+        assert!(wide_body(&buf).is_empty());
+        // 万一空の緩衝を渡されても添字で落ちない
+        assert!(wide_body(&[]).is_empty());
     }
 
     #[test]
