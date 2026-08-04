@@ -1,0 +1,252 @@
+/* 矢立 web 殻の見た目 — 紙と墨。 */
+
+:root {
+  --paper: #faf8f3;
+  --sumi: #1c1a17;
+  --usu: #6d6459;
+  --keshi: #e6e0d4;
+  --shu: #9c3a2c;          /* 朱 — 選ばれてゐるもの */
+  --ai: #3a4a6b;           /* 藍 — 未確定 */
+  --line: #d8d1c2;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #17161a;
+    --sumi: #e9e5dc;
+    --usu: #9a9184;
+    --keshi: #2a2830;
+    --shu: #c8695a;
+    --ai: #8ea6d0;
+    --line: #38343d;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--sumi);
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
+  line-height: 1.9;
+}
+
+main {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 5rem;
+}
+
+h1 {
+  font-size: 2.2rem;
+  font-weight: 600;
+  letter-spacing: .12em;
+  margin: 0 0 .2em;
+}
+h1 .yomi {
+  display: block;
+  font-size: .8rem;
+  letter-spacing: .5em;
+  color: var(--usu);
+}
+h2 {
+  font-size: .95rem;
+  font-weight: 600;
+  letter-spacing: .2em;
+  color: var(--usu);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: .3em;
+  margin: 2.5rem 0 1rem;
+}
+.lead { margin: 0 0 .8em; }
+.note { font-size: .82rem; color: var(--usu); line-height: 1.8; }
+footer { margin-top: 3rem; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+
+/* ── 紙 ─────────────────────────────────────────────────── */
+
+#paper {
+  min-height: 9rem;
+  padding: 1.1rem 1.2rem;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--paper) 92%, #fff);
+  font-size: 1.35rem;
+  line-height: 2.1;
+  outline: none;
+}
+#paper:focus-within { border-color: var(--usu); }
+#paper:empty::before {
+  content: attr(data-placeholder);
+  color: var(--usu);
+  opacity: .6;
+}
+
+/* 未確定 — 淡く、下線で「まだ決まつてゐない」ことを示す */
+.preedit {
+  color: var(--ai);
+  border-bottom: 2px solid var(--ai);
+  padding-bottom: 1px;
+}
+.preedit.shifted { border-bottom-style: double; }
+
+/* 読みを持つた塊。読みは薄く上に振る（ルビのやうに） */
+.kata {
+  position: relative;
+  border-bottom: 1px dotted color-mix(in srgb, var(--usu) 55%, transparent);
+}
+.kata::after {
+  content: attr(data-yomi);
+  position: absolute;
+  left: 0; right: 0; bottom: 100%;
+  font-size: .5em;
+  line-height: 1.2;
+  color: var(--usu);
+  text-align: center;
+  pointer-events: none;
+  white-space: nowrap;
+  opacity: .75;
+}
+
+/* ── 候補 ───────────────────────────────────────────────── */
+
+/* `display: flex` は UA の `[hidden] { display: none }` に勝つてしまふ。
+   明示的に消さないと、確定した後も空の候補窓が残る（実物を見て分かつた）。 */
+#bar[hidden] { display: none; }
+
+#bar {
+  margin-top: .6rem;
+  padding: .5rem .7rem;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--keshi);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .6rem;
+}
+#bar-yomi {
+  font-size: .85rem;
+  color: var(--usu);
+  border-right: 1px solid var(--line);
+  padding-right: .6rem;
+}
+#cands {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  margin: 0;
+  padding: 0;
+  flex: 1 1 auto;
+}
+#cands li {
+  display: flex;
+  align-items: baseline;
+  gap: .4rem;
+  padding: .15rem .5rem;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  cursor: pointer;
+}
+#cands li.on {
+  border-color: var(--shu);
+  background: color-mix(in srgb, var(--shu) 12%, transparent);
+}
+#cands .surface { font-size: 1.05rem; }
+#cands .source { font-size: .68rem; color: var(--usu); }
+.hint { font-size: .72rem; color: var(--usu); }
+kbd {
+  font-family: inherit;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 0 .3em;
+}
+
+/* ── 原器の図 ───────────────────────────────────────────── */
+
+details { margin-top: 2rem; }
+summary {
+  cursor: pointer;
+  font-size: .9rem;
+  letter-spacing: .1em;
+  color: var(--usu);
+  padding: .3em 0;
+}
+
+#board { margin: .9rem 0; }
+#board .row {
+  display: flex;
+  gap: .28rem;
+  margin-bottom: .28rem;
+}
+#board .row:nth-child(2) { padding-left: 1.1rem; }
+#board .row:nth-child(3) { padding-left: 1.7rem; }
+#board .row:nth-child(4) { padding-left: 2.4rem; }
+
+#board kbd {
+  position: relative;
+  width: 2.6rem;
+  height: 2.6rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: linear-gradient(
+    color-mix(in srgb, var(--sumi) calc(var(--ink, 0) * 26%), transparent),
+    color-mix(in srgb, var(--sumi) calc(var(--ink, 0) * 26%), transparent)
+  );
+  transition: background .18s ease;
+}
+#board kbd.dead { opacity: .28; }
+#board kbd b { font-weight: 500; font-size: 1rem; }
+#board kbd i {
+  font-style: normal;
+  font-size: .62rem;
+  color: var(--usu);
+  opacity: .7;
+}
+#board kbd.mod b { font-size: .62rem; color: var(--usu); }
+/* 前置シフトが立つてゐる間は第二面を主にする */
+#board.shifted kbd b { font-size: .62rem; color: var(--usu); opacity: .55; order: 2; }
+#board.shifted kbd i { font-size: 1rem; color: var(--sumi); opacity: 1; order: 1; }
+
+/* ── 覚えたこと ─────────────────────────────────────────── */
+
+#manabi {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .9rem;
+  margin: .8rem 0;
+}
+#manabi th, #manabi td {
+  text-align: left;
+  padding: .3em .5em;
+  border-bottom: 1px solid var(--line);
+}
+#manabi th { font-weight: 600; color: var(--usu); font-size: .8rem; }
+#manabi td:nth-child(3) { text-align: right; color: var(--usu); }
+
+.actions { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+button, .button {
+  font-family: inherit;
+  font-size: .85rem;
+  padding: .3em .9em;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--sumi);
+  cursor: pointer;
+}
+button:hover, .button:hover { border-color: var(--usu); }
+button.danger { color: var(--shu); border-color: color-mix(in srgb, var(--shu) 40%, var(--line)); }
+#manabi td button { font-size: .72rem; padding: .1em .5em; color: var(--usu); }
+
+@media (max-width: 34rem) {
+  #board kbd { width: 2.1rem; height: 2.1rem; }
+  #board kbd b { font-size: .85rem; }
+}

@@ -1,0 +1,115 @@
+{
+ "_comment": "自動生成（cargo run --bin gen-vectors）— 手で編集しないこと。核（core/src/bunsetsu.rs・core/src/jisho.rs）がロジックの SSOT である。",
+ "source": "core/src/bunsetsu.rs",
+ "jisho_entries": 232, "max_yomi_chars": 5,
+ "queries": [
+  {"query": "けふはよきてんきなり",
+   "yomi_list": ["けふは", "よき", "てんきなり"],
+   "compose": "今日は良き天気なり", "commit": "今日は良き天氣なり",
+   "segments": [
+    {"yomi": "けふは", "chosen": 0,
+     "candidates": [{"surface": "今日は", "cost": 3488, "in_jisho": true}, {"surface": "けふは", "cost": 14000, "in_jisho": false}]},
+    {"yomi": "よき", "chosen": 0,
+     "candidates": [{"surface": "良き", "cost": 3581, "in_jisho": true}, {"surface": "よき", "cost": 14000, "in_jisho": false}]},
+    {"yomi": "てんきなり", "chosen": 0,
+     "candidates": [{"surface": "天気なり", "cost": 3894, "in_jisho": true}, {"surface": "てんきなり", "cost": 21000, "in_jisho": false}]}
+   ]},
+  {"query": "やまのうへにくもあり",
+   "yomi_list": ["やまの", "うへに", "くも", "あり"],
+   "compose": "山の上に雲有り", "commit": "山の上に雲有り",
+   "segments": [
+    {"yomi": "やまの", "chosen": 0,
+     "candidates": [{"surface": "山の", "cost": 3581, "in_jisho": true}, {"surface": "やまの", "cost": 14000, "in_jisho": false}]},
+    {"yomi": "うへに", "chosen": 0,
+     "candidates": [{"surface": "上に", "cost": 3736, "in_jisho": true}, {"surface": "うへに", "cost": 14000, "in_jisho": false}]},
+    {"yomi": "くも", "chosen": 0,
+     "candidates": [{"surface": "雲", "cost": 3894, "in_jisho": true}, {"surface": "くも", "cost": 14000, "in_jisho": false}]},
+    {"yomi": "あり", "chosen": 0,
+     "candidates": [{"surface": "有り", "cost": 3325, "in_jisho": true}, {"surface": "あり", "cost": 14000, "in_jisho": false}]}
+   ]},
+  {"query": "はなのいろはうつくしき",
+   "yomi_list": ["はなの", "いろは", "うつくしき"],
+   "compose": "花の色は美しき", "commit": "花の色は美しき",
+   "segments": [
+    {"yomi": "はなの", "chosen": 0,
+     "candidates": [{"surface": "花の", "cost": 3663, "in_jisho": true}, {"surface": "鼻の", "cost": 4232, "in_jisho": true}, {"surface": "はなの", "cost": 14000, "in_jisho": false}]},
+    {"yomi": "いろは", "chosen": 0,
+     "candidates": [{"surface": "色は", "cost": 3788, "in_jisho": true}, {"surface": "いろは", "cost": 14000, "in_jisho": false}]},
+    {"yomi": "うつくしき", "chosen": 0,
+     "candidates": [{"surface": "美しき", "cost": 3894, "in_jisho": true}, {"surface": "うつくしき", "cost": 35000, "in_jisho": false}]}
+   ]},
+  {"query": "ものをおもふ",
+   "yomi_list": ["ものを", "おもふ"],
+   "compose": "者を思ふ", "commit": "者を思ふ",
+   "segments": [
+    {"yomi": "ものを", "chosen": 0,
+     "candidates": [{"surface": "者を", "cost": 3532, "in_jisho": true}, {"surface": "物を", "cost": 3581, "in_jisho": true}, {"surface": "ものを", "cost": 14000, "in_jisho": false}]},
+    {"yomi": "おもふ", "chosen": 0,
+     "candidates": [{"surface": "思ふ", "cost": 3488, "in_jisho": true}, {"surface": "おもふ", "cost": 21000, "in_jisho": false}]}
+   ]},
+  {"query": "なり",
+   "yomi_list": ["なり"],
+   "compose": "成り", "commit": "成り",
+   "segments": [
+    {"yomi": "なり", "chosen": 1,
+     "candidates": [{"surface": "なり", "cost": 3126, "in_jisho": true}, {"surface": "成り", "cost": 3488, "in_jisho": true}]}
+   ]},
+  {"query": "もの",
+   "yomi_list": ["もの"],
+   "compose": "者", "commit": "者",
+   "segments": [
+    {"yomi": "もの", "chosen": 0,
+     "candidates": [{"surface": "者", "cost": 3532, "in_jisho": true}, {"surface": "物", "cost": 3581, "in_jisho": true}, {"surface": "もの", "cost": 14000, "in_jisho": false}]}
+   ]},
+  {"query": "ぷりん",
+   "yomi_list": ["ぷりん"],
+   "compose": "ぷりん", "commit": "ぷりん",
+   "segments": [
+    {"yomi": "ぷりん", "chosen": 0,
+     "candidates": [{"surface": "ぷりん", "cost": 7000, "in_jisho": false}]}
+   ]},
+  {"query": "ぷりんをたべ",
+   "yomi_list": ["ぷりんを", "たべ"],
+   "compose": "ぷりんをたべ", "commit": "ぷりんをたべ",
+   "segments": [
+    {"yomi": "ぷりんを", "chosen": 0,
+     "candidates": [{"surface": "ぷりんを", "cost": 7000, "in_jisho": false}]},
+    {"yomi": "たべ", "chosen": 0,
+     "candidates": [{"surface": "たべ", "cost": 7000, "in_jisho": false}]}
+   ]},
+  {"query": "てんきなり",
+   "yomi_list": ["てんきなり"],
+   "compose": "天気なり", "commit": "天氣なり",
+   "segments": [
+    {"yomi": "てんきなり", "chosen": 0,
+     "candidates": [{"surface": "天気なり", "cost": 3894, "in_jisho": true}, {"surface": "てんきなり", "cost": 21000, "in_jisho": false}]}
+   ]},
+  {"query": "われはうみのこ",
+   "yomi_list": ["われは", "うみの", "こ"],
+   "compose": "我は海の子", "commit": "我は海の子",
+   "segments": [
+    {"yomi": "われは", "chosen": 0,
+     "candidates": [{"surface": "我は", "cost": 3626, "in_jisho": true}, {"surface": "われは", "cost": 14000, "in_jisho": false}]},
+    {"yomi": "うみの", "chosen": 0,
+     "candidates": [{"surface": "海の", "cost": 3705, "in_jisho": true}, {"surface": "うみの", "cost": 14000, "in_jisho": false}]},
+    {"yomi": "こ", "chosen": 0,
+     "candidates": [{"surface": "子", "cost": 3788, "in_jisho": true}, {"surface": "こ", "cost": 7000, "in_jisho": false}]}
+   ]},
+  {"query": "",
+   "yomi_list": [],
+   "compose": "", "commit": "",
+   "segments": [
+
+   ]}
+ ],
+ "edits": [
+  {"query": "けふはよきてんきなり", "op": "merge", "at": 0,
+   "yomi_list": ["けふはよき", "てんきなり"], "compose": "今日は良き天気なり"},
+  {"query": "けふはよきてんきなり", "op": "merge", "at": 1,
+   "yomi_list": ["けふは", "よきてんきなり"], "compose": "今日は良き天気なり"},
+  {"query": "けふはよきてんきなり", "op": "split", "at": 2,
+   "yomi_list": ["けふ", "は", "よき", "てんきなり"], "compose": "今日は良き天気なり"},
+  {"query": "やまのうへにくもあり", "op": "split", "at": 1,
+   "yomi_list": ["や", "まの", "うへに", "くも", "あり"], "compose": "やまの上に雲有り"}
+ ]
+}

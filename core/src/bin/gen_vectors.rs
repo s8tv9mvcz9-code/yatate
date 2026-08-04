@@ -19,6 +19,7 @@ use std::path::PathBuf;
 
 use yatate_core::genki::{self, type_keys};
 use yatate_core::gojuon::{self, Deflect};
+use yatate_core::jisho;
 use yatate_core::kehai::{self, KeyId, MIN_EVIDENCE};
 
 fn esc(s: &str) -> String {
@@ -235,6 +236,156 @@ fn genki_vectors() -> String {
     out
 }
 
+/// 文節分割 — **golden query セット**による検索品質の回帰検査（issue #4）。
+///
+/// 索引（辞書）が決定的なので、品質の物差しを ubuntu の `cargo test` に載せられる。
+/// ここが捕まへるのは「辞書を足したら別の語の候補順が変はつた」「費用の重みを弄つたら
+/// 分割が壊れた」といふ、単体試験では見えない**回帰**である。
+///
+/// query は代表例を選ぶ: 設計書の例文・同音異表記・文頭の助詞/自立語の競合・
+/// 辞書に無い語・長い語と短い語の競合・区切り修正の後。
+fn bunsetsu_vectors() -> String {
+    use yatate_core::bunsetsu::{self, Bunsetsu};
+
+    let mut out = String::from(
+        "{\n \"_comment\": \"自動生成（cargo run --bin gen-vectors）— 手で編集しないこと。\
+核（core/src/bunsetsu.rs・core/src/jisho.rs）がロジックの SSOT である。\",\n \
+\"source\": \"core/src/bunsetsu.rs\",\n",
+    );
+    let _ = writeln!(
+        out,
+        " \"jisho_entries\": {}, \"max_yomi_chars\": {},",
+        jisho::ENTRIES,
+        jisho::MAX_YOMI_CHARS
+    );
+
+    let seg_json = |segs: &[Bunsetsu]| -> String {
+        let rows: Vec<String> = segs
+            .iter()
+            .map(|s| {
+                let cands: Vec<String> = s
+                    .candidates
+                    .iter()
+                    .map(|c| {
+                        format!(
+                            "{{\"surface\": \"{}\", \"cost\": {}, \"in_jisho\": {}}}",
+                            esc(&c.surface),
+                            c.cost,
+                            c.in_jisho
+                        )
+                    })
+                    .collect();
+                format!(
+                    "    {{\"yomi\": \"{}\", \"chosen\": {},\n     \"candidates\": [{}]}}",
+                    esc(&s.yomi),
+                    s.chosen,
+                    cands.join(", ")
+                )
+            })
+            .collect();
+        rows.join(",\n")
+    };
+
+    let queries = [
+        "けふはよきてんきなり", // 設計書（roadmap M2）の出口条件そのもの
+        "やまのうへにくもあり",
+        "はなのいろはうつくしき",
+        "ものをおもふ",   // 同音異表記（者・物）
+        "なり",           // 文頭の助動詞 対 自立語
+        "もの",           // 候補が複数立つ最小の例
+        "ぷりん",         // 辞書に無い読み（仮名のまま一続き）
+        "ぷりんをたべ",   // 未知語と助詞の混在
+        "てんきなり",     // 長い語（てんき）と短い語（てん＋き）の競合
+        "われはうみのこ", // 一字の自立語が続く
+        "",               // 空
+    ];
+
+    let mut cases: Vec<String> = Vec::new();
+    for q in queries {
+        let segs = bunsetsu::segment(q);
+        // 被覆は変換の中核の不変条件。ベクトルにも載せて、崩れたら気づけるやうにする。
+        assert_eq!(
+            bunsetsu::coverage_error(q, &segs),
+            None,
+            "{q:?} で読みの被覆が崩れてゐる"
+        );
+        cases.push(format!(
+            "  {{\"query\": \"{}\",\n   \"yomi_list\": [{}],\n   \"compose\": \"{}\", \
+\"commit\": \"{}\",\n   \"segments\": [\n{}\n   ]}}",
+            esc(q),
+            bunsetsu::yomi_list(&segs)
+                .iter()
+                .map(|y| format!("\"{}\"", esc(y)))
+                .collect::<Vec<_>>()
+                .join(", "),
+            esc(&bunsetsu::compose(&segs)),
+            esc(&bunsetsu::commit(&segs)),
+            seg_json(&segs)
+        ));
+    }
+    let _ = write!(out, " \"queries\": [\n{}\n ],\n", cases.join(",\n"));
+
+    // 区切り修正 — 繋げる／割るの後も読みが失はれないこと（往復の不変条件）
+    let mut edits: Vec<String> = Vec::new();
+    for (q, op, at) in [
+        ("けふはよきてんきなり", "merge", 0),
+        ("けふはよきてんきなり", "merge", 1),
+        ("けふはよきてんきなり", "split", 2),
+        ("やまのうへにくもあり", "split", 1),
+    ] {
+        let mut segs = bunsetsu::segment(q);
+        let ok = match op {
+            "merge" => bunsetsu::merge(&mut segs, at),
+            _ => bunsetsu::split(&mut segs, 0, at),
+        };
+        assert!(ok, "{q:?} の {op}({at}) が失敗した");
+        assert_eq!(
+            bunsetsu::coverage_error(q, &segs),
+            None,
+            "{op} で読みが失はれた"
+        );
+        edits.push(format!(
+            "  {{\"query\": \"{}\", \"op\": \"{op}\", \"at\": {at},\n   \
+\"yomi_list\": [{}], \"compose\": \"{}\"}}",
+            esc(q),
+            bunsetsu::yomi_list(&segs)
+                .iter()
+                .map(|y| format!("\"{}\"", esc(y)))
+                .collect::<Vec<_>>()
+                .join(", "),
+            esc(&bunsetsu::compose(&segs))
+        ));
+    }
+    let _ = write!(out, " \"edits\": [\n{}\n ]\n}}\n", edits.join(",\n"));
+    out
+}
+
+/// 鍵の物理位置 — **殻をまたぐ地図**。
+///
+/// web の殻は核の表をそのまま使ひ、Windows の殻は自分の表をこれに照合する。
+/// 同じ地図を二枚持つと放つておいて必ずずれる、といふのがこのファイルの前提である。
+fn kagi_vectors() -> String {
+    use yatate_core::kagi::KAGI;
+
+    let mut out = String::from(
+        "{\n \"_comment\": \"自動生成（cargo run --bin gen-vectors）— 手で編集しないこと。\
+核（core/src/kagi.rs）が鍵の物理位置の SSOT である。\",\n \"source\": \"core/src/kagi.rs\",\n",
+    );
+    let rows: Vec<String> = KAGI
+        .iter()
+        .map(|k| {
+            format!(
+                "  {{\"genki\": \"{}\", \"code\": \"{}\", \"scan\": {}}}",
+                esc(&k.genki.to_string()),
+                esc(k.code),
+                k.scan
+            )
+        })
+        .collect();
+    let _ = write!(out, " \"keys\": [\n{}\n ]\n}}\n", rows.join(",\n"));
+    out
+}
+
 fn main() {
     let dir: PathBuf = [env!("CARGO_MANIFEST_DIR"), "vectors"].iter().collect();
     fs::create_dir_all(&dir).expect("vectors/ を作れない");
@@ -242,6 +393,8 @@ fn main() {
         ("gojuon.json", gojuon_vectors()),
         ("kehai.json", kehai_vectors()),
         ("genki.json", genki_vectors()),
+        ("bunsetsu.json", bunsetsu_vectors()),
+        ("kagi.json", kagi_vectors()),
     ] {
         let path = dir.join(name);
         fs::write(&path, body).unwrap_or_else(|e| panic!("{}: {e}", path.display()));

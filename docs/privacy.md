@@ -1,7 +1,7 @@
 # プライバシーポリシー / Privacy Policy
 
 **矢立（Yatate）— 文語 IME**
-最終更新: 2026-07-31 ／ Last updated: 2026-07-31
+最終更新: 2026-08-04 ／ Last updated: 2026-08-04
 
 ---
 
@@ -38,10 +38,33 @@ iOS のカスタムキーボードには「フルアクセス」という許可�
 これらはソースコードで確認できます。本アプリは MIT ライセンスの
 オープンソースです: https://github.com/s8tv9mvcz9-code/yatate
 
+## 3-2. web 版について（頁として配るもの）
+
+**web 版だけは、頁と核（wasm）を取りに行くところが通信になります。** ここは
+アプリ版と性質が違ふので、曖昧にせず書き分けます。
+
+| もの | どこで起きるか |
+|---|---|
+| 頁と wasm の取得 | **通信**（初回のみ。以後はブラウザのキャッシュで開けます） |
+| 打鍵・変換・旧字確定 | ブラウザの中だけ。どこへも送りません |
+| 学習した対（読み → 表記） | そのブラウザの `localStorage` のみ。送信も同期もしません |
+
+配るのは**静的な頁だけ**で、こちらへ何かを送り返す仕組みはありません。
+
+そしてこれは約束の文だけで支へてゐるのではありません。組み上がつた wasm には
+**`import` が一つも無く**、外の世界の関数を一つも呼べません——通信も保存も、
+そもそも出来ない造りです。この性質は `web/check_wasm.py` が CI で毎回検めてゐます。
+
+「そのブラウザだけ」は制約ではなく約束の一部です。機を替へて持ち運びたいときは、
+頁の「書き出す／読み込む」（単一の JSON ファイル）を使ひます——これも端末の中で
+完結し、どこへも送りません。
+
 ## 4. 端末内に保存されるもの
 
 キーボードの設定（表示の切り替え等）が端末内に保存されます。
-これらは端末の外へ出ることはなく、アプリを削除すれば消えます。
+web 版では、学習した「読み → 表記」の対がそのブラウザの `localStorage` に保存されます。
+これらは端末の外へ出ることはなく、アプリを削除する（web 版はブラウザの保存領域を消す）
+と消えます。
 
 ## 5. 子どもの利用について
 
@@ -73,6 +96,14 @@ apps — it does not use `documentContextBeforeInput` or related APIs at all.
 The dictionary and statistics used for conversion are derived from public-domain
 works of Aozora Bunko and are **bundled in the app**; all processing happens on
 your device.
+
+**The web version** is the one exception worth stating plainly: fetching the page
+and the wasm module is network traffic. Everything after that — typing, conversion,
+old-glyph finalisation, and learning — happens inside your browser, and learned
+readings live only in that browser's `localStorage`. We serve a static page and
+have no endpoint to send anything back to. This is not merely a promise: the
+compiled wasm module has **no imports at all**, so it cannot call out to anything;
+`web/check_wasm.py` verifies this on every CI run.
 
 All of this can be verified in the source code — the project is open source under
 the MIT license: https://github.com/s8tv9mvcz9-code/yatate

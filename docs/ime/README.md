@@ -9,7 +9,8 @@
 > サーバ校合は任意の上乗せとして [protocol.md](./protocol.md) に残してある。
 >
 > **いまの実体**: 共有核 [`core/`](../../core/README.md)（Rust・依存ゼロ）＋ OS ごとの殻。
-> iOS の殻は実装済み、Windows は骨組み、macOS と Android はこれから
+> iOS の殻は実装済み、Windows は実装（実機待ち）、**web は wasm で動いてゐる**
+> （[web.md](./web.md)）。macOS と Android はこれから
 > （[cross-platform.md](./cross-platform.md)）。
 
 ## 設計書の構成
@@ -24,6 +25,8 @@
 | [fuzukue.md](./fuzukue.md) | 文机モード — 大画面を五十音の紙面＝ステートマシンにする macOS 版の先行像（iOS フル画面でエミュレート）。マスが状態・運筆が遷移・連綿が語 |
 | [roadmap.md](./roadmap.md) | 工程 — M0〜M4（iOS）のマイルストーン、リスク、ライセンス、コスト見積り |
 | [cross-platform.md](./cross-platform.md) | 多platform展開 — macOS(IMKit)・Windows(TSF)・Android(IMS)。**殻は OS ごとに native、核は Rust 一本**。黄金ベクトル・CI 課金・配布署名・M5〜M9 |
+| [web.md](./web.md) | web 殻 — 変換器を作らず鍵盤だけ web に出し、手修正を覚える。wasm（wasm-bindgen 無し）・`KeyboardEvent.code` で引く物理位置・読みを持つた塊・localStorage への学習・無通信の約束の書き分け |
+| [artifacts.md](./artifacts.md) | 焼き付け成果物 — 収穫（通信あり・非決定的）と焼き付け（通信なし・決定的）を分け、後者だけを $0 の ubuntu CI に載せる。辞書・埋め込みの形式、目録によるハッシュゲート、模型を差し替へたときの差分の見せ方 |
 
 ## なぜ IME か
 

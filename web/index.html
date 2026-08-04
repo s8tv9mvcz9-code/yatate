@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>矢立 — 鍵盤だけの web 版</title>
+<meta name="description" content="原器（縦組五十音配列）で歴史的仮名遣ひを打ち、手で直したところを覚える。通信しない。">
+<!-- 空の favicon。置かないとブラウザが /favicon.ico を取りに行き、
+     「この頁は何も取りに行かない」といふ約束に穴が開いたやうに見える。 -->
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+
+<header>
+  <h1>矢立<span class="yomi">やたて</span></h1>
+  <p class="lead">
+    原器（縦組五十音配列）で仮名を打ち、漢字は<strong>手で直す</strong>。
+    直したところはこのブラウザが覚えて、二度目から候補に出る。
+  </p>
+  <p class="note" id="status">核（wasm）を読み込んでゐます…</p>
+</header>
+
+<section aria-labelledby="paper-h">
+  <h2 id="paper-h">紙</h2>
+  <div id="paper" contenteditable="true" spellcheck="false"
+       aria-label="編輯欄" data-placeholder="ここへ打つ（例: u d g で「けふは」）"></div>
+
+  <div id="bar" hidden>
+    <span id="bar-yomi"></span>
+    <ol id="cands"></ol>
+    <span class="hint"><kbd>Space</kbd> 送る　<kbd>Enter</kbd> 採る　<kbd>Esc</kbd> やめる</span>
+  </div>
+
+  <p class="note">
+    確定した仮名は<strong>読みを持つた塊</strong>として置かれる。
+    塊の中の字を書き換へると、読みはそのままで表記だけが変はり、その差分が教へた内容になる。
+  </p>
+</section>
+
+<details id="board-wrap">
+  <summary>原器の図（稽古の補助輪）</summary>
+  <div id="board" aria-hidden="true"></div>
+  <p class="note">
+    濃淡は<strong>墨の氣配</strong>——直前の一字から見た次の一打の分布である。
+    図は核が返す表をそのまま描いてゐるので、図と実際の打鍵はずれやうが無い。
+  </p>
+</details>
+
+<details id="manabi-wrap">
+  <summary>覚えたこと（<span id="manabi-count">0</span> 対）</summary>
+  <table id="manabi">
+    <thead><tr><th>読み</th><th>表記</th><th>度数</th><th></th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <p class="actions">
+    <button type="button" id="export">書き出す</button>
+    <label class="button" for="import-file">読み込む</label>
+    <input type="file" id="import-file" accept="application/json" hidden>
+    <button type="button" id="forget" class="danger">全部忘れる</button>
+  </p>
+  <p class="note">
+    同じ読みに複数の表記が付いたら、使つた回数の多い順に並べる（消さない——
+    文語では「今日／けふ」の書き分けが普通に起きる）。
+    書き出した JSON は他の機へ持つて行ける。
+  </p>
+</details>
+
+<footer>
+  <h2>通信について</h2>
+  <p>
+    この頁と wasm を取りに行くところ<strong>だけ</strong>が通信である。
+    打鍵・変換・旧字確定・学習は、すべてブラウザの中で終はる。
+  </p>
+  <p>
+    根拠は作文ではない。組み上がつた wasm には <code>import</code> が<strong>一つも無い</strong>
+    ——外の世界の関数を一つも呼べないので、通信も保存も出来ない。
+    これは <code>web/check_wasm.py</code> が CI で毎回検めてゐる。
+    覚えた対はこのブラウザの <code>localStorage</code> にだけ残り、送信も同期もしない。
+  </p>
+</footer>
+
+</main>
+<script src="yatate.js"></script>
+</body>
+</html>

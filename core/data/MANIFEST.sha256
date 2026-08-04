@@ -1,0 +1,12 @@
+# 焼き付け成果物の目録 — scripts/check_artifacts.py が縛る
+#
+# 形式: <sha256>  <リポジトリ相対path>
+#
+# 収穫（通信あり・オフラインで一回）した人が --update で書き直し、
+# CI は検査だけを回す。目録に無いファイルが core/data/ に居ると失敗する
+# ——関門を持たない成果物を作らせないためである（docs/ime/artifacts.md §3）。
+#
+# 埋め込み・索引のやうな非テキストの成果物が入つたときも、守り方はこの一枚で足りる。
+# バイナリの差分は読めないが、ハッシュの一行なら読める。
+eb1e2dd7af976a42fa378e1a6b975a34b67338a4c88ba733cedc659997c93eaf  core/data/jisho.tsv
+0ad9586e98e95a23da0880a4ba7d1f41fff5230dece5eb5777a30bf374c71fa7  core/data/kana_bigram.txt

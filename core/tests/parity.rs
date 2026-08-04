@@ -228,6 +228,183 @@ fn 氣配のベクトルが核と一致する() {
     }
 }
 
+/// **golden query セットによる検索品質の回帰検査**（issue #4）。
+///
+/// 辞書（索引）が決定的なので、$0 の ubuntu ランナーで品質の物差しが持てる。
+/// ここが捕まへるのは単体試験では見えない回帰である——
+/// 「辞書に一語足したら無関係な文の分割が変はつた」「費用の重みを触つたら
+/// 候補順が入れ替はつた」。どちらも黙つて起きるので、ベクトルに焼いて縛る。
+#[test]
+fn 文節のベクトルが核と一致する() {
+    use yatate_core::bunsetsu;
+    use yatate_core::jisho;
+
+    let v = load("bunsetsu.json");
+    assert_eq!(
+        v["jisho_entries"].as_u64(),
+        Some(jisho::ENTRIES as u64),
+        "辞書の語数がベクトルと食ひ違ふ（gen_jisho_tables.py の再実行を忘れてゐる可能性）"
+    );
+    assert_eq!(
+        v["max_yomi_chars"].as_u64(),
+        Some(jisho::MAX_YOMI_CHARS as u64)
+    );
+
+    let queries = v["queries"].as_array().expect("queries");
+    assert!(
+        !queries.is_empty(),
+        "queries が空（ゲートが無効化されてゐる）"
+    );
+
+    for case in queries {
+        let q = case["query"].as_str().expect("query");
+        let segs = bunsetsu::segment(q);
+
+        // ① 読みの被覆 — 変換の中核の不変条件
+        assert_eq!(
+            bunsetsu::coverage_error(q, &segs),
+            None,
+            "{q:?} で読みが失はれてゐる"
+        );
+
+        // ② 区切り
+        let want_yomi: Vec<&str> = case["yomi_list"]
+            .as_array()
+            .expect("yomi_list")
+            .iter()
+            .map(|y| y.as_str().expect("yomi"))
+            .collect();
+        assert_eq!(bunsetsu::yomi_list(&segs), want_yomi, "{q:?} の区切り");
+
+        // ③ 合成と確定（旧字は確定のときに定まる）
+        assert_eq!(
+            bunsetsu::compose(&segs),
+            case["compose"].as_str().expect("compose"),
+            "{q:?} の合成"
+        );
+        assert_eq!(
+            bunsetsu::commit(&segs),
+            case["commit"].as_str().expect("commit"),
+            "{q:?} の確定（旧字）"
+        );
+
+        // ④ 候補の中身と並び — 「品質」の実体はここである
+        let want_segs = case["segments"].as_array().expect("segments");
+        assert_eq!(want_segs.len(), segs.len(), "{q:?} の文節数");
+        for (seg, want) in segs.iter().zip(want_segs) {
+            assert_eq!(
+                seg.chosen as u64,
+                want["chosen"].as_u64().expect("chosen"),
+                "{q:?} / {} の既定選択",
+                seg.yomi
+            );
+            let want_cands = want["candidates"].as_array().expect("candidates");
+            assert!(!want_cands.is_empty(), "候補が空の文節を作つてゐる");
+            assert_eq!(
+                seg.candidates.len(),
+                want_cands.len(),
+                "{q:?} / {} の候補数",
+                seg.yomi
+            );
+            for (got, want) in seg.candidates.iter().zip(want_cands) {
+                assert_eq!(
+                    got.surface,
+                    want["surface"].as_str().expect("surface"),
+                    "{q:?} / {} の候補の並び",
+                    seg.yomi
+                );
+                assert_eq!(
+                    got.cost as i64,
+                    want["cost"].as_i64().expect("cost"),
+                    "{q:?} / {} の {} の費用",
+                    seg.yomi,
+                    got.surface
+                );
+                assert_eq!(
+                    got.in_jisho,
+                    want["in_jisho"].as_bool().expect("in_jisho"),
+                    "{q:?} / {} の {} の出所",
+                    seg.yomi,
+                    got.surface
+                );
+            }
+        }
+    }
+}
+
+/// 区切り修正の往復 — 繋げても割つても**読みは失はれない**。
+#[test]
+fn 区切り修正のベクトルが核と一致する() {
+    use yatate_core::bunsetsu;
+
+    let v = load("bunsetsu.json");
+    let edits = v["edits"].as_array().expect("edits");
+    assert!(!edits.is_empty(), "edits が空（ゲートが無効化されてゐる）");
+
+    for case in edits {
+        let q = case["query"].as_str().expect("query");
+        let op = case["op"].as_str().expect("op");
+        let at = case["at"].as_u64().expect("at") as usize;
+
+        let mut segs = bunsetsu::segment(q);
+        let ok = match op {
+            "merge" => bunsetsu::merge(&mut segs, at),
+            "split" => bunsetsu::split(&mut segs, 0, at),
+            other => panic!("未知の区切り修正: {other}"),
+        };
+        assert!(ok, "{q:?} の {op}({at}) が失敗した");
+
+        assert_eq!(
+            bunsetsu::coverage_error(q, &segs),
+            None,
+            "{op} で読みが失はれた"
+        );
+        let want_yomi: Vec<&str> = case["yomi_list"]
+            .as_array()
+            .expect("yomi_list")
+            .iter()
+            .map(|y| y.as_str().expect("yomi"))
+            .collect();
+        assert_eq!(bunsetsu::yomi_list(&segs), want_yomi, "{q:?} {op}({at})");
+        assert_eq!(
+            bunsetsu::compose(&segs),
+            case["compose"].as_str().expect("compose"),
+            "{q:?} {op}({at}) の合成"
+        );
+    }
+}
+
+/// 鍵の物理位置 — **web と Windows の二つの殻が従ふ一枚の地図**。
+///
+/// このベクトルが古くなると、二つの殻が違ふ位置を指しはじめる。
+/// とくに配列で意味の変はる三鍵（さ・し・前置シフト）は、ずれても
+/// 例外も警告も出ずに黙つて違ふ字が出るので、ここで名指しして縛る。
+#[test]
+fn 鍵の位置のベクトルが核と一致する() {
+    use yatate_core::kagi;
+
+    let v = load("kagi.json");
+    let keys = v["keys"].as_array().expect("keys");
+    assert!(!keys.is_empty(), "keys が空（ゲートが無効化されてゐる）");
+    assert_eq!(keys.len(), kagi::KAGI.len(), "鍵の数");
+
+    for case in keys {
+        let genki = case["genki"]
+            .as_str()
+            .expect("genki")
+            .chars()
+            .next()
+            .unwrap();
+        let code = case["code"].as_str().expect("code");
+        let scan = case["scan"].as_u64().expect("scan") as u16;
+
+        assert_eq!(kagi::genki_of_code(code), Some(genki), "{code} → 原器");
+        assert_eq!(kagi::genki_of_scan(scan), Some(genki), "{scan:#04X} → 原器");
+        assert_eq!(kagi::code_of(genki), Some(code), "{genki} → code");
+        assert_eq!(kagi::scan_of(genki), Some(scan), "{genki} → 走査符号");
+    }
+}
+
 #[test]
 fn 原器のベクトルが核と一致する() {
     use yatate_core::genki::{self, type_keys, Genki};
