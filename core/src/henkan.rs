@@ -229,8 +229,12 @@ impl Henkan {
 
     /// 候補を番号で選ぶ（候補窓を持つ殻が使ふ）。
     pub fn choose(&mut self, index: usize) -> Act {
+        // パターンガードの中では可変借用が取れないので、素直に分岐する。
         match self.segs.get_mut(self.focus) {
-            Some(seg) if seg.choose(index) => Act::Update,
+            Some(seg) if seg.candidates.len() > index => {
+                seg.choose(index);
+                Act::Update
+            }
             _ => Act::Swallow,
         }
     }
