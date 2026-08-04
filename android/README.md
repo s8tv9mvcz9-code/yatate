@@ -97,10 +97,13 @@ CI が同じ関門を回し、加へて
 
 ## 実機で確かめる
 
-CI の `yatate-android-debug-apk` を落として入れる（**未署名の debug ビルド**）。
+配布物は GitHub Releases の **`android-latest`** に置いてある（`yatate-android.apk`）。
+`main` へ入るたびに同じ URL で差し替はるので、拾ふ側は URL を覚えるだけでよい
+（Windows 殻の `windows-latest` と同じ流儀）。**未署名の debug ビルド**である。
 
 ```bash
-adb install -r app-debug.apk
+gh release download android-latest --repo s8tv9mvcz9-code/yatate --pattern 'yatate-android.apk'
+adb install -r yatate-android.apk
 ```
 
 そのあと 設定 → システム → 言語と入力 → 画面キーボード →「矢立（文語 IME）」を有効にし、

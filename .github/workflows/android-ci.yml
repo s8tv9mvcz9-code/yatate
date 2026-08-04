@@ -150,9 +150,49 @@ jobs:
             fi
           done
 
+      - name: 配る名へ改める
+        working-directory: android
+        run: cp app/build/outputs/apk/debug/app-debug.apk ../yatate-android.apk
+
       - name: 配布物
         uses: actions/upload-artifact@v4
         with:
-          name: yatate-android-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 14
+          name: yatate-android-apk
+          path: yatate-android.apk
+          retention-days: 30
+
+  # ── main へ入つたら、同じ URL で拾へるローリングリリースへ添付する ──
+  #
+  # artifact は 30 日で消え、取得に認証も要る。**端末へ入れる人が
+  # 素手で拾へる場所**が要るので、Windows 殻と同じ流儀でリリースへ載せる。
+  publish:
+    name: ローリングリリース（android-latest）
+    needs: apk
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: yatate-android-apk
+      - name: 添付
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # view が一時障害で失敗しても create の 422 で落ちないやう三段構へ
+          gh release view android-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create android-latest --repo "$GITHUB_REPOSITORY" \
+              --prerelease --title "Android（ローリング・未署名）" \
+              --notes "main の最新。導入は android/README.md 参照。" || \
+            gh release view android-latest --repo "$GITHUB_REPOSITORY" >/dev/null
+          gh release upload android-latest yatate-android.apk --clobber --repo "$GITHUB_REPOSITORY"
+          # 改行は printf で作る。YAML のブロック内で桁 0 から書き始めると
+          # ブロックを抜けて**ファイルごと構文エラー**になり、ジョブが一つも走らない。
+          notes=$(printf '%s\n\n%s\n\n%s\n' \
+            "main の最新（commit: ${GITHUB_SHA}）。arm64-v8a ／ x86_64 の両方を含む。" \
+            "**未署名の debug ビルド**ゆゑ手元検証用。入れたあと 設定 → システム → 言語と入力 → 画面キーボード で「矢立（文語 IME）」を有効にすること。" \
+            "打ち方は https://s8tv9mvcz9-code.github.io/yatate/ を参照。")
+          gh release edit android-latest --repo "$GITHUB_REPOSITORY" --notes "$notes"
