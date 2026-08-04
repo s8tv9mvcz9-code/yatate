@@ -274,7 +274,7 @@ core/vectors/*.json        ← SSOT が生成する（入力 → 期待出力）
    ├─ gojuon.json   ✅済   行×段×逸らしの全格子 150 通り＋逆引き 85 字
    ├─ kehai.json    ✅済   bigram → 鍵ごとの墨・段の墨・筆脈の峰（12 例）
    ├─ genki.json    ✅済   原器の両面（30＋20 鍵）と打鍵列の例（14 例）
-   ├─ coverage.json        読みの被覆検査（一致・脱落・捏造・順序入替）
+   ├─ bunsetsu.json ✅済   golden query — 分割・候補・費用・区切り修正（11 問＋4 例）
    └─ canon.json           正規化（畳む字・畳まない長音則）
 ```
 

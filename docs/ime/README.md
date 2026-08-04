@@ -24,6 +24,7 @@
 | [fuzukue.md](./fuzukue.md) | 文机モード — 大画面を五十音の紙面＝ステートマシンにする macOS 版の先行像（iOS フル画面でエミュレート）。マスが状態・運筆が遷移・連綿が語 |
 | [roadmap.md](./roadmap.md) | 工程 — M0〜M4（iOS）のマイルストーン、リスク、ライセンス、コスト見積り |
 | [cross-platform.md](./cross-platform.md) | 多platform展開 — macOS(IMKit)・Windows(TSF)・Android(IMS)。**殻は OS ごとに native、核は Rust 一本**。黄金ベクトル・CI 課金・配布署名・M5〜M9 |
+| [artifacts.md](./artifacts.md) | 焼き付け成果物 — 収穫（通信あり・非決定的）と焼き付け（通信なし・決定的）を分け、後者だけを $0 の ubuntu CI に載せる。辞書・埋め込みの形式、目録によるハッシュゲート、模型を差し替へたときの差分の見せ方 |
 
 ## なぜ IME か
 

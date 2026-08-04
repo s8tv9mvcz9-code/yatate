@@ -19,17 +19,21 @@
 //! 挙動の一致は `core/vectors/*.json`（Python が生成する黄金ベクトル）を
 //! `cargo test` が流して機械的に検査する。
 
+pub mod bunsetsu;
 pub mod composer;
 pub mod generated;
 pub mod genki;
 pub mod gojuon;
+pub mod jisho;
 pub mod kehai;
 pub mod kyuji;
 pub mod session;
 
+pub use bunsetsu::{coverage_error, segment, Bunsetsu, Cand};
 pub use composer::Composer;
 pub use genki::{Edit, Genki};
 pub use gojuon::{Deflect, Gyo};
+pub use jisho::{Pos, Word};
 pub use kehai::{field, ActionField, KeyId};
 pub use kyuji::{kyuji_stream, to_kyuji, to_kyuji_body, KyujiStream, POINT_MARKER};
 pub use session::{KeyAction, Session};
