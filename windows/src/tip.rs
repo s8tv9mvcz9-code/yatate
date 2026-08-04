@@ -29,14 +29,14 @@ use std::rc::Rc;
 
 use windows::core::{implement, IUnknownImpl, Interface, Ref, Result, BOOL};
 use windows::Win32::Foundation::{LPARAM, WPARAM};
-use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CONTROL, VK_MENU};
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CONTROL, VK_MENU, VK_SHIFT};
 use windows::Win32::UI::TextServices::{
     ITfComposition, ITfCompositionSink, ITfCompositionSink_Impl, ITfContext, ITfEditSession,
     ITfKeyEventSink, ITfKeyEventSink_Impl, ITfKeystrokeMgr, ITfTextInputProcessor,
     ITfTextInputProcessor_Impl, ITfThreadMgr,
 };
 
-use yatate_core::session::{KeyAction, Session};
+use yatate_core::henkan::{Act, Henkan};
 
 use crate::edit::{request, CompositionCell, CompositionEdit, EditAction};
 use crate::keymap::{self, Scan, Vk};
@@ -47,8 +47,8 @@ use crate::keymap::{self, Scan, Vk};
 /// 同じスレッドからしか触られないためである。
 #[implement(ITfTextInputProcessor, ITfKeyEventSink, ITfCompositionSink)]
 pub struct Tip {
-    /// 打鍵の状態機械（**OS 非依存**）。矢立の頭脳はここに居る。
-    session: RefCell<Session>,
+    /// 打鍵と変換の状態機械（**OS 非依存**）。矢立の頭脳はここに居る。
+    henkan: RefCell<Henkan>,
     /// `Activate` で受け取るクライアント ID（sink の登録・解除に使ふ）。
     client_id: Cell<u32>,
     /// TSF の元締め。`Deactivate` で目を外すために持つ。
@@ -66,7 +66,7 @@ impl Default for Tip {
 impl Tip {
     pub fn new() -> Self {
         Self {
-            session: RefCell::new(Session::new()),
+            henkan: RefCell::new(Henkan::new()),
             client_id: Cell::new(0),
             thread_mgr: RefCell::new(None),
             composition: Rc::new(RefCell::new(None)),
@@ -75,7 +75,7 @@ impl Tip {
 
     /// いま未確定文字列を抱へてゐるか。
     fn is_composing(&self) -> bool {
-        self.session.borrow().is_composing()
+        self.henkan.borrow().is_composing()
     }
 
     /// `lParam` から走査符号（物理位置）を取り出す。16〜23 bit に入つてくる。
@@ -90,23 +90,70 @@ impl Tip {
         unsafe { (GetKeyState(VK_CONTROL.0 as i32) < 0) || (GetKeyState(VK_MENU.0 as i32) < 0) }
     }
 
+    /// Shift が押されてゐるか。**Ctrl / Alt とは別に見る**——矢印との併用で
+    /// 文節の区切りを直すのに要るからである（原器の前置シフトとは無関係で、
+    /// 原器は `^` の逐次打鍵であつて同時押しを使はない）。
+    fn shift_held() -> bool {
+        // SAFETY: 引数は仮想キーコードのみ。読み取り専用の問合せ。
+        unsafe { GetKeyState(VK_SHIFT.0 as i32) < 0 }
+    }
+
     /// この打鍵を矢立が扱ふか（**問はれてゐるだけ。状態は触らない**）。
     fn wants(&self, vk: Vk, scan: Scan) -> bool {
         if Self::modifier_held() {
             return false;
         }
-        // 未確定を抱へてゐる間は、機能キーも受けて確定・取り消しの機会を残す
+        // 未確定を抱へてゐる間は、機能キーも受けて確定・取り消し・変換の機会を残す
         if self.is_composing()
             && matches!(
                 vk,
-                keymap::VK_BACK | keymap::VK_RETURN | keymap::VK_ESCAPE | keymap::VK_SPACE
+                keymap::VK_BACK
+                    | keymap::VK_RETURN
+                    | keymap::VK_ESCAPE
+                    | keymap::VK_SPACE
+                    | keymap::VK_LEFT
+                    | keymap::VK_RIGHT
+                    | keymap::VK_UP
+                    | keymap::VK_DOWN
             )
         {
             return true;
         }
         match keymap::genki_char(vk, scan) {
-            Some(ch) => self.session.borrow().wants_key(ch),
+            Some(ch) => self.henkan.borrow().wants_key(ch),
             None => false,
+        }
+    }
+
+    /// 核が返した指示を文書へ移す。返り値は「食つたか」。
+    fn apply_act(&self, context: &ITfContext, sink: &ITfCompositionSink, act: Act) -> bool {
+        match act {
+            Act::Update => {
+                let text = self.henkan.borrow().preedit();
+                self.apply(context, sink, EditAction::Update(text));
+                true
+            }
+            // 前置シフトが立つた・範囲外の操作だつた等。**食ふ**
+            //（流すと `^` や矢印がアプリへ抜けて未確定が壊れる）
+            Act::Swallow => true,
+            Act::Passthrough => false,
+            Act::Commit(text) => {
+                self.apply(context, sink, EditAction::Commit(text));
+                true
+            }
+            // 変換中に原器の鍵が来た場合。**次の未確定を先に読んでおく**——
+            // 確定で composition を閉ぢると `OnCompositionTerminated` が来て
+            // 核を片付け得るので、その後に読むと新しい打鍵が消える。
+            Act::CommitThenUpdate(text) => {
+                let next = self.henkan.borrow().preedit();
+                self.apply(context, sink, EditAction::Commit(text));
+                self.apply(context, sink, EditAction::Update(next));
+                true
+            }
+            Act::Cancel => {
+                self.apply(context, sink, EditAction::Cancel);
+                true
+            }
         }
     }
 
@@ -136,33 +183,27 @@ impl Tip {
         }
 
         // ── 機能キー（未確定を抱へてゐるときだけ意味を持つ）──
+        //
+        // Space は**確定ではなく変換**である（世間の IME と同じ作法）。
+        // 仮名のまま入れたいときは Enter で確定する。
         if self.is_composing() {
-            match vk {
-                keymap::VK_RETURN | keymap::VK_SPACE => {
-                    // M7-b では候補窓を持たないので、確定＝仮名のまま（旧字は核が確定させる）
-                    let action = match self.session.borrow_mut().commit() {
-                        KeyAction::Commit(text) => EditAction::Commit(text),
-                        _ => EditAction::Cancel,
-                    };
-                    self.apply(context, sink, action);
-                    return true;
-                }
-                keymap::VK_ESCAPE => {
-                    self.session.borrow_mut().cancel();
-                    self.apply(context, sink, EditAction::Cancel);
-                    return true;
-                }
-                keymap::VK_BACK => {
-                    let still = self.session.borrow_mut().backspace();
-                    let action = if still {
-                        EditAction::Update(self.session.borrow().preedit().to_string())
-                    } else {
-                        EditAction::Cancel
-                    };
-                    self.apply(context, sink, action);
-                    return true;
-                }
-                _ => {}
+            let shift = Self::shift_held();
+            let act = match vk {
+                keymap::VK_SPACE => Some(self.henkan.borrow_mut().convert()),
+                keymap::VK_RETURN => Some(self.henkan.borrow_mut().commit()),
+                keymap::VK_ESCAPE => Some(self.henkan.borrow_mut().cancel()),
+                keymap::VK_BACK => Some(self.henkan.borrow_mut().backspace()),
+                // Shift 併用は**区切りの修正**、単独は注目文節の移動
+                keymap::VK_LEFT if shift => Some(self.henkan.borrow_mut().shrink_focus()),
+                keymap::VK_RIGHT if shift => Some(self.henkan.borrow_mut().grow_focus()),
+                keymap::VK_LEFT => Some(self.henkan.borrow_mut().focus_prev()),
+                keymap::VK_RIGHT => Some(self.henkan.borrow_mut().focus_next()),
+                keymap::VK_DOWN => Some(self.henkan.borrow_mut().next_candidate()),
+                keymap::VK_UP => Some(self.henkan.borrow_mut().prev_candidate()),
+                _ => None,
+            };
+            if let Some(act) = act {
+                return self.apply_act(context, sink, act);
             }
         }
 
@@ -170,21 +211,8 @@ impl Tip {
         let Some(ch) = keymap::genki_char(vk, scan) else {
             return false;
         };
-        let action = self.session.borrow_mut().key(ch);
-        match action {
-            KeyAction::Update => {
-                let text = self.session.borrow().preedit().to_string();
-                self.apply(context, sink, EditAction::Update(text));
-                true
-            }
-            // 前置シフトが立つた等。**食ふ**（流すと `^` が入力されてしまふ）
-            KeyAction::Swallow => true,
-            KeyAction::Passthrough => false,
-            KeyAction::Commit(text) => {
-                self.apply(context, sink, EditAction::Commit(text));
-                true
-            }
-        }
+        let act = self.henkan.borrow_mut().key(ch);
+        self.apply_act(context, sink, act)
     }
 }
 
@@ -220,7 +248,7 @@ impl ITfTextInputProcessor_Impl for Tip_Impl {
                 }
             }
         }
-        me.session.borrow_mut().cancel();
+        me.henkan.borrow_mut().reset();
         *me.composition.borrow_mut() = None;
         me.client_id.set(0);
         Ok(())
@@ -231,7 +259,7 @@ impl ITfKeyEventSink_Impl for Tip_Impl {
     /// 入力欄が替はつた。抱へてゐた未確定文字列は捨てる（別の欄へ持ち越さない）。
     fn OnSetFocus(&self, _fforeground: BOOL) -> Result<()> {
         let me = &self.this;
-        me.session.borrow_mut().cancel();
+        me.henkan.borrow_mut().reset();
         *me.composition.borrow_mut() = None;
         Ok(())
     }
@@ -294,7 +322,7 @@ impl ITfCompositionSink_Impl for Tip_Impl {
         _pcomposition: Ref<'_, ITfComposition>,
     ) -> Result<()> {
         let me = &self.this;
-        me.session.borrow_mut().cancel();
+        me.henkan.borrow_mut().reset();
         *me.composition.borrow_mut() = None;
         Ok(())
     }

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 入力方式としての名乗り。日本語の一つだけ。 -->
+<input-method xmlns:android="http://schemas.android.com/apk/res/android"
+    android:supportsSwitchingToNextInputMethod="true">
+    <subtype
+        android:label="@string/ime_name"
+        android:imeSubtypeLocale="ja_JP"
+        android:imeSubtypeMode="keyboard"
+        android:isAsciiCapable="false" />
+</input-method>

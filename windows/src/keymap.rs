@@ -70,6 +70,19 @@ pub const VK_SHIFT: Vk = 0x10;
 pub const VK_CONTROL: Vk = 0x11;
 pub const VK_MENU: Vk = 0x12;
 
+// ── 変換の段で使ふ矢印（`yatate_core::henkan`）────────────
+//
+// 走査符号では引かない。矢印は拡張キー（`E0` 前置）で、原器の三鍵とは
+// 走査符号の空間が重ならないので VK で足りる。
+/// 注目する文節を左へ（Shift 併用で**縮める**）。
+pub const VK_LEFT: Vk = 0x25;
+/// 前の候補へ。
+pub const VK_UP: Vk = 0x26;
+/// 注目する文節を右へ（Shift 併用で**伸ばす**）。
+pub const VK_RIGHT: Vk = 0x27;
+/// 次の候補へ。
+pub const VK_DOWN: Vk = 0x28;
+
 /// `GetKeyboardType(0)` が日本語鍵盤を指す値。**配列の判定はこれで行ふ**
 /// （`GetKeyboardLayout` の HKL では 106 と 101 を見分けられない——
 /// 日本語環境ではどちらも入力ロケールが同一で、差は下層の
@@ -289,11 +302,38 @@ mod tests {
     #[test]
     fn 機能キーは原器の領分でない() {
         for vk in [
-            VK_BACK, VK_RETURN, VK_ESCAPE, VK_SPACE, VK_SHIFT, VK_CONTROL, VK_MENU,
+            VK_BACK, VK_RETURN, VK_ESCAPE, VK_SPACE, VK_SHIFT, VK_CONTROL, VK_MENU, VK_LEFT, VK_UP,
+            VK_RIGHT, VK_DOWN,
         ] {
             assert!(
                 !is_genki_key(vk, 0),
                 "VK {vk:#04X} を原器が食つてはいけない"
+            );
+        }
+    }
+
+    /// 矢印は変換の段でだけ意味を持つ。**走査符号が来ても**原器の鍵と衝突しないこと。
+    ///
+    /// 矢印は拡張キー（`E0` 前置）で走査符号は 0x4B・0x48・0x4D・0x50 であり、
+    /// 原器が位置で引く三鍵（0x28・0x27・0x0D）とは重ならない。
+    /// ここが重なると「文節を移さうとしたら さ が入る」といふ事故になる。
+    #[test]
+    fn 矢印の走査符号は原器の三鍵と重ならない() {
+        for (vk, sc) in [
+            (VK_LEFT, 0x4B),
+            (VK_UP, 0x48),
+            (VK_RIGHT, 0x4D),
+            (VK_DOWN, 0x50),
+        ] {
+            assert!(
+                !is_genki_key(vk, sc),
+                "矢印 VK {vk:#04X} / sc {sc:#04X} を原器が食つてはいけない"
+            );
+        }
+        for (sc, _) in POSITIONAL_TABLE.iter() {
+            assert!(
+                ![0x4B_u16, 0x48, 0x4D, 0x50].contains(sc),
+                "原器の位置 {sc:#04X} が矢印と衝突してゐる"
             );
         }
     }

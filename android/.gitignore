@@ -1,0 +1,9 @@
+﻿# cargo-ndk が置く .so（CI で組み直すので追跡しない）
+app/src/main/jniLibs/
+# Gradle
+.gradle/
+build/
+app/build/
+local.properties
+# Rust
+rust/target/

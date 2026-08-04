@@ -375,10 +375,12 @@ fn kagi_vectors() -> String {
         .iter()
         .map(|k| {
             format!(
-                "  {{\"genki\": \"{}\", \"code\": \"{}\", \"scan\": {}}}",
+                "  {{\"genki\": \"{}\", \"code\": \"{}\", \"scan\": {}, \"mac\": {}, \"hid\": {}}}",
                 esc(&k.genki.to_string()),
                 esc(k.code),
-                k.scan
+                k.scan,
+                k.mac,
+                k.hid
             )
         })
         .collect();
