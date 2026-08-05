@@ -8,8 +8,8 @@
 //
 // ただし**本体アプリ**は `pressesBegan(_:with:)` でハードキーを受け取れる。
 // システム全体の IME にはならないが、原器を iPad の外付け鍵盤で打つ稽古場としては
-// 成立する——そして何より、**核（Session・Kagi）が iOS でも同じ答へを出すこと**を
-// 実機で確かめる場になる。
+// 成立する——そして何より、**核（Henkan・Kagi）が iOS でも同じ答へを出すこと**を
+// 実機で確かめる場になる。運指は macOS 殻・Windows 殻と一字一句同じである。
 //
 // ## 鍵は HID usage で引く
 //
@@ -26,8 +26,8 @@ import YatateCore
 
 /// `pressesBegan` を拾ふためだけの UIView。**ここに頭脳は無い。**
 final class HardKeyPickupView: UIView {
-    /// 物理位置（HID usage）をそのまま上へ渡す。判断は核がする。
-    var onKey: ((UIKeyboardHIDUsage) -> Bool)?
+    /// 打鍵をそのまま上へ渡す。判断は核がする。
+    var onKey: ((UIKey) -> Bool)?
 
     override var canBecomeFirstResponder: Bool { true }
 
@@ -39,9 +39,10 @@ final class HardKeyPickupView: UIView {
                 continue
             }
             // 修飾キーが押されてゐれば手を出さない（短絡キーを奪はない）。
-            // Shift は見ない——原器の前置シフトは `^` の逐次打鍵である。
+            // **Shift だけは通す**——原器の前置シフトは `^` の逐次打鍵なので
+            // 同時押しの Shift は空いてをり、区切り修正に使へる。
             let mods = key.modifierFlags.intersection([.command, .control, .alternate])
-            if !mods.isEmpty || onKey?(key.keyCode) != true {
+            if !mods.isEmpty || onKey?(key) != true {
                 unhandled.insert(press)
             }
         }
@@ -52,7 +53,7 @@ final class HardKeyPickupView: UIView {
 }
 
 struct HardKeyPickup: UIViewRepresentable {
-    let onKey: (UIKeyboardHIDUsage) -> Bool
+    let onKey: (UIKey) -> Bool
 
     func makeUIView(context: Context) -> HardKeyPickupView {
         let v = HardKeyPickupView()
@@ -68,77 +69,82 @@ struct HardKeyPickup: UIViewRepresentable {
 
 // MARK: - 稽古場
 
-/// 打鍵の状態を持つ器。**核の Session をそのまま駆動する**（写しを持たない）。
+/// 打鍵の状態を持つ器。**核の Henkan をそのまま駆動する**（写しを持たない）。
 @MainActor
 final class GenkiKeyboardModel: ObservableObject {
     @Published private(set) var preedit = ""
     @Published private(set) var committed = ""
     @Published private(set) var shifted = false
+    @Published private(set) var converting = false
+    @Published private(set) var candidates: [String] = []
+    @Published private(set) var chosen = 0
     /// 直前に受けた物理位置（実機で「どの鍵が来たか」を目で確かめるため）。
     @Published private(set) var lastUsage: UInt16?
     @Published private(set) var lastGenki: Character?
 
-    private var session = Session()
+    private let henkan = Henkan()
 
     /// 返り値は「食つたか」。食はなかつた鍵は OS へ返す。
-    func handle(_ usage: UIKeyboardHIDUsage) -> Bool {
+    func handle(_ key: UIKey) -> Bool {
+        let usage = key.keyCode
         lastUsage = UInt16(usage.rawValue)
+        // **位置と、その位置が指す原器の字は、常に同時に更新する。**
+        // 機能キーで早く返る道で片方だけ置いていくと、画面が
+        //「HID 0x28（Enter）→ 原器 '4'」といふ嘘を平然と出す——
+        // ここは「どの鍵が来たか」を目で確かめるための欄なので、嘘は致命である。
+        lastGenki = genki(hid: UInt16(usage.rawValue))
+        let shift = key.modifierFlags.contains(.shift)
 
         // ── 機能キー（未確定を抱へてゐるときだけ意味を持つ）──
-        if session.isComposing {
+        if henkan.isComposing {
             switch usage {
-            case .keyboardReturnOrEnter, .keypadEnter, .keyboardSpacebar:
-                commit()
-                return true
+            case .keyboardSpacebar:
+                return apply(henkan.convert())
+            case .keyboardReturnOrEnter, .keypadEnter:
+                return apply(henkan.commit())
             case .keyboardEscape:
-                session.cancel()
-                sync()
-                return true
+                return apply(henkan.cancel())
             case .keyboardDeleteOrBackspace:
-                _ = session.backspace()
-                sync()
-                return true
+                return apply(henkan.backspace())
+            case .keyboardLeftArrow:
+                return apply(shift ? henkan.shrinkFocus() : henkan.focusPrev())
+            case .keyboardRightArrow:
+                return apply(shift ? henkan.growFocus() : henkan.focusNext())
+            case .keyboardDownArrow:
+                return apply(henkan.nextCandidate())
+            case .keyboardUpArrow:
+                return apply(henkan.prevCandidate())
             default:
                 break
             }
         }
 
-        guard let ch = genki(hid: UInt16(usage.rawValue)) else {
-            lastGenki = nil
-            return false
-        }
-        lastGenki = ch
-        switch session.key(ch) {
-        case .update, .swallow:
-            sync()
-            return true
-        case .passthrough:
-            return false
-        case .commit(let text):
-            committed += text
-            sync()
-            return true
-        }
-    }
-
-    func commit() {
-        if case .commit(let text) = session.commit() {
-            committed += text
-        }
-        sync()
+        guard let ch = lastGenki else { return false }
+        return apply(henkan.key(ch))
     }
 
     func clear() {
-        session.cancel()
+        henkan.reset()
         committed = ""
         lastUsage = nil
         lastGenki = nil
         sync()
     }
 
+    /// 核が返した指示のとほりに描く。**判断はここでしない。**
+    private func apply(_ act: Act) -> Bool {
+        if case .passthrough = act { return false }
+        if let text = act.committed { committed += text }
+        sync()
+        return true
+    }
+
     private func sync() {
-        preedit = session.preedit
-        shifted = session.isShifted
+        preedit = henkan.preedit
+        shifted = henkan.isShifted
+        converting = henkan.phase == .henkan
+        candidates = henkan.candidates.map(\.surface)
+        chosen = henkan.chosen
     }
 }
 
@@ -155,33 +161,39 @@ struct GenkiHardKeyboardView: View {
             HardKeyPickup { model.handle($0) }
                 .frame(width: 0, height: 0)
 
-            VStack(alignment: .leading, spacing: 20) {
-                header
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    header
 
-                paperRow("確定", model.committed.isEmpty ? "—" : model.committed)
-                paperRow("未確定", model.preedit.isEmpty ? "—" : model.preedit)
+                    paperRow("確定", model.committed.isEmpty ? "—" : model.committed)
+                    paperRow(
+                        model.converting ? "未確定（変換中）" : "未確定",
+                        model.preedit.isEmpty ? "—" : model.preedit)
 
-                HStack(spacing: 12) {
-                    if model.shifted {
-                        Label("前置シフト", systemImage: "arrow.up.square")
-                            .foregroundStyle(Sumi.key(scheme))
+                    if model.converting && model.candidates.count > 1 {
+                        candidateStrip
                     }
-                    if let u = model.lastUsage {
-                        Text(lastKeyDescription(u))
-                            .font(.system(.footnote, design: .monospaced))
-                            .foregroundStyle(Sumi.fringe(scheme))
+
+                    HStack(spacing: 12) {
+                        if model.shifted {
+                            Label("前置シフト", systemImage: "arrow.up.square")
+                                .foregroundStyle(.primary)
+                        }
+                        if let u = model.lastUsage {
+                            Text(lastKeyDescription(u))
+                                .font(.system(.footnote, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
                     }
+
+                    layoutChart
+
+                    Button("消す") { model.clear() }
+                        .buttonStyle(.bordered)
                 }
-
-                layoutChart
-
-                Button("消す") { model.clear() }
-                    .buttonStyle(.bordered)
-
-                Spacer()
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(24)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -189,13 +201,42 @@ struct GenkiHardKeyboardView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("原器 — ハード鍵盤")
                 .font(.title2.weight(.semibold))
-                .foregroundStyle(Sumi.key(scheme))
+                .foregroundStyle(.primary)
             Text(
                 "外付け鍵盤で打つてください。**位置**で引くので、英字配列でも刻印どほりに動きます"
-                    + "（US の ' ; = が : ; ^ に当たる）。Enter か Space で確定、Esc で取消。"
+                    + "（US の ' ; = が : ; ^ に当たる）。"
             )
             .font(.footnote)
-            .foregroundStyle(Sumi.fringe(scheme))
+            .foregroundStyle(.secondary)
+            Text(
+                "空白＝変換／次の候補・Enter＝確定・Esc＝戻す・←→＝文節・"
+                    + "Shift+←→＝区切り・↑↓＝候補。**macOS と Windows の殻と同じ運指**です。"
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    /// 候補の並び。**核が並べた順**をそのまま描く（費用の昇順）。
+    private var candidateStrip: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("候補（\(model.chosen + 1)/\(model.candidates.count)）")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(model.candidates.enumerated()), id: \.offset) { i, surface in
+                        Text(surface)
+                            .font(.system(size: 20))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                i == model.chosen
+                                    ? Color.accentColor.opacity(0.25) : Sumi.slip(scheme),
+                                in: RoundedRectangle(cornerRadius: 7))
+                    }
+                }
+            }
         }
     }
 
@@ -203,10 +244,10 @@ struct GenkiHardKeyboardView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label)
                 .font(.caption)
-                .foregroundStyle(Sumi.fringe(scheme))
+                .foregroundStyle(.secondary)
             Text(value)
                 .font(.system(size: 26))
-                .foregroundStyle(Sumi.key(scheme))
+                .foregroundStyle(.primary)
                 .textSelection(.enabled)
         }
     }
@@ -216,14 +257,14 @@ struct GenkiHardKeyboardView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("原器 \(KagiTable.keys.count) 鍵（核の表をそのまま描く）")
                 .font(.caption)
-                .foregroundStyle(Sumi.fringe(scheme))
+                .foregroundStyle(.secondary)
             Text(
                 KagiTable.keys
                     .map { "\($0.genki)\(typeKeys(String($0.genki)))" }
                     .joined(separator: "  ")
             )
             .font(.system(.caption, design: .monospaced))
-            .foregroundStyle(Sumi.fringe(scheme))
+            .foregroundStyle(.secondary)
         }
     }
 
