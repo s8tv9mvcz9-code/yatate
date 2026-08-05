@@ -39,7 +39,8 @@ echo "▶ 核を組む（scripts/build-apple-ffi.sh）"
 echo "▶ xcodegen generate"
 xcodegen generate >/dev/null
 
-echo "▶ 署名ビルド（team=$TEAM, config=$CONFIG）"
+# 全角の括弧の直前は波括弧で囲む（囲まないとロケール次第で変数名に呑まれる）
+echo "▶ 署名ビルド（team=$TEAM, config=${CONFIG}）"
 set +e
 xcodebuild build \
   -project Yatate.xcodeproj -scheme Yatate \

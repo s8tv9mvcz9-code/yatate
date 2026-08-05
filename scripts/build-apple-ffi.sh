@@ -63,7 +63,10 @@ if ((${#missing[@]})); then
   rustup target add "${missing[@]}"
 fi
 
-echo "▸ 組む（$PROFILE_DIR）"
+# ⚠ 変数の直後に全角の括弧が来るときは **必ず波括弧で囲む**。
+# `$PROFILE_DIR）` と書くと、ロケール次第で bash が全角の閉じ括弧まで
+# 変数名の一部として読み、`unbound variable` で落ちる（手元は通り、CI で落ちた）。
+echo "▸ 組む（${PROFILE_DIR}）"
 for t in "${ALL_TARGETS[@]}"; do
   # macOS 既定の bash は 3.2 で、空配列の展開が `set -u` に触れる
   ( cd "$CRATE" && cargo build ${CARGO_FLAGS[@]+"${CARGO_FLAGS[@]}"} --target "$t" --lib )
