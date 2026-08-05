@@ -13,6 +13,7 @@ on:
   push:
     paths:
       - "core/**"
+      - "apple/**"
       - "windows/**"
       - "web/**"
       - "ssot/**"
@@ -25,6 +26,7 @@ on:
   pull_request:
     paths:
       - "core/**"
+      - "apple/**"
       - "windows/**"
       - "web/**"
       - "ssot/**"
@@ -91,7 +93,7 @@ jobs:
       # 生成物の鮮度ゲート — 再生成して差分が出たら「元を変へたのに写しが古い」といふこと。
       #
       #   表（Python が SSOT）   : ssot/kyuji.py           → core/src/generated/kyuji_table.rs
-      #   表（データが SSOT）    : core/data/kana_bigram.txt → Swift と Rust の bigram 表
+      #   表（データが SSOT）    : core/data/kana_bigram.txt → core/src/generated/kana_bigram.rs
       #   表（データが SSOT）    : core/data/jisho.tsv       → core/src/generated/jisho_table.rs
       #   ベクトル（Python）     : ssot/kyuji.py           → core/vectors/kyuji.json
       #   ベクトル（核がSSOT）   : core/src/*.rs           → core/vectors/{gojuon,kehai,genki,bunsetsu}.json
@@ -106,9 +108,7 @@ jobs:
           python3 scripts/gen_jisho_tables.py
           python3 scripts/gen_parity_vectors.py
           cargo run --quiet --manifest-path core/Cargo.toml --bin gen-vectors
-          git diff --exit-code -- \
-            core/src/generated core/vectors core/data \
-            ios/YatateCore/Sources/YatateCore/Generated
+          git diff --exit-code -- core/src/generated core/vectors core/data
 
   # Windows の殻（TSF）— **ubuntu で検査する**（課金 1 倍）。
   # 頭脳（session）は OS を知らないので host で試験でき、COM 側は
@@ -140,6 +140,36 @@ jobs:
       - name: cargo check（x86_64-pc-windows-gnu）
         working-directory: windows
         run: cargo check --target x86_64-pc-windows-gnu
+
+  # Apple の束縛（apple/）— **ubuntu で検査する**（課金 1 倍）。
+  #
+  # ここは核を C ABI で出すだけの層で、Apple の SDK を一切使はない。
+  # だから中身の正しさは ubuntu で全部見られる——macOS ランナー（10 倍）が要るのは
+  # 「静的ライブラリが組めて Swift がリンクできるか」だけで、それは ios-ci.yml の仕事。
+  #
+  # とりわけ `頭書` の試験が肝である。include/yatate_ffi.h は手で書いてゐるので、
+  # 実装と食ひ違へば Swift から呼べない（か、もつと悪く引数の並びが違ふまま動く）。
+  # Windows 殻がエクスポート表を検めてゐるのと同じ関門を、ここでも敷く。
+  apple-bindings:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust ツールチェーン
+        run: |
+          rustup toolchain install stable --profile minimal \
+            --component rustfmt --component clippy
+          rustup default stable
+
+      - name: cargo test（C ABI・頭書と実装の一致）
+        working-directory: apple
+        run: cargo test --all-targets
+
+      - name: cargo clippy / fmt
+        working-directory: apple
+        run: |
+          cargo clippy --all-targets -- -D warnings
+          cargo fmt --check
 
   # web の殻（wasm）— **ubuntu で全部見る**（課金 1 倍）。
   #

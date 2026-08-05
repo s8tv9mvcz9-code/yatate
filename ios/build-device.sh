@@ -31,6 +31,11 @@ fi
 CONFIG="${CONFIG:-Debug}"
 DERIVED="build-device"
 
+# 核（Rust）を Apple の静的ライブラリへ。**これを飛ばすと SPM が
+# 「artifact が無い」で止まる**（Package.swift が xcframework を指してゐる）。
+echo "▶ 核を組む（scripts/build-apple-ffi.sh）"
+../scripts/build-apple-ffi.sh --release >/dev/null
+
 echo "▶ xcodegen generate"
 xcodegen generate >/dev/null
 

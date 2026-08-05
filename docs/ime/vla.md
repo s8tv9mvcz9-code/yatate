@@ -76,12 +76,13 @@
 > 二つの表が静かにずれ、iOS と Windows で違ふ絵を描くことになるため。
 >
 > なほ核では**峰の同点を読み順の先着で割る**決定的な規則にしてある。
-> Swift 版は `Dictionary.max` ゆゑ同点で揺れ得るが、M5-b2 で核へ載れば消える。
+> かつての Swift 版は `Dictionary.max` ゆゑ同点で揺れ得たが、**M5-b2 で核へ載つたので消えた**。
 
 青空文庫の旧字旧仮名テキストから**仮名連**（ルビ除去後の本文に現れる ひらがな の連なり
 ——助詞・助動詞・送り仮名、すなわち**文語の呼吸**そのもの）を取り出し、
-仮名 bigram を数へて Swift テーブルに機械生成する（`scripts/gen_yatate_ngram.py` →
-`Generated/KanaBigram.swift`。`kyuji.py` → `KyujiTable` と同じ SSOT 生成の流儀）。
+仮名 bigram を数へて核の表に機械生成する（`scripts/gen_yatate_ngram.py` →
+`core/data/kana_bigram.txt` → `scripts/gen_bigram_tables.py` →
+`core/src/generated/kana_bigram.rs`）。**表は一枚だけ**で、全 OS の殻がそれを見る。
 
 - 実行時は `Kehai`（気配）が bigram を行×段の行為空間へ射影する:
   P(次の仮名) を、その仮名が住む鍵（行キー・ん・句読点）へ足し込み、最大値で正規化して

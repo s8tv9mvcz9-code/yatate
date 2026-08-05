@@ -11,10 +11,10 @@ ios/
   project.yml            # XcodeGen（既存）に 2 ターゲットを追加
   Sources/               # 既存 BungoRag アプリ（本体＝containing app）
   YatateKeyboard/        # 新規: キーボード拡張ターゲット
-  YatateCore/            # 新規: ローカル Swift Package（本体・拡張で共有）
-    Sources/YatateCore/
-      Generated/         # Python SSOT からの機械生成（手書き禁止—protocol.md §5）
-    Tests/YatateCoreTests/
+  YatateCore/            # ローカル Swift Package（本体・拡張・macOS の殻で共有）
+    Sources/YatateCore/  # **核（core/・Rust）を呼ぶ薄い層**。表もロジックも持たない
+    YatateFFI.xcframework/  # 生成物（scripts/build-apple-ffi.sh・git に入れない）
+    Tests/YatateCoreTests/  # 黄金ベクトルとのパリティ検査
 ```
 
 - **YatateCore** に移すもの: 既存 `Net/BungoAPI.swift`・`Model/Models.swift`
