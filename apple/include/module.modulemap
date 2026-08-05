@@ -1,0 +1,8 @@
+// Swift が `import YatateFFI` で核の入口を見るための名乗り。
+//
+// 静的ライブラリ（libyatate_apple.a）は xcframework の同じ枝に置いてあり、
+// リンクは SPM/Xcode が引き受ける。ここは頭書だけを束ねる。
+module YatateFFI {
+    header "yatate_ffi.h"
+    export *
+}
