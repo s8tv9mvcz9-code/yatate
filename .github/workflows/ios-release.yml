@@ -102,6 +102,25 @@ jobs:
           grep -o 'CURRENT_PROJECT_VERSION: "[^"]*"' ios/project.yml
           echo "BUILD_NUMBER=$BUILD" >> "$GITHUB_ENV"
 
+      # ランナー像に cargo が在るかは像次第なので、**自分で据ゑる**
+      # （core-ci.yml と同じ流儀）。ここは無人のリリース経路なので、
+      # 「たまたま像に入つてゐた」に賭けない。
+      - name: Rust ツールチェーン
+        run: |
+          rustup toolchain install stable --profile minimal || \
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+              | sh -s -- -y --profile minimal --default-toolchain stable
+          source "$HOME/.cargo/env" 2>/dev/null || true
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          rustup default stable
+
+      # **これを飛ばすとアーカイブが始まる前に SPM が止まる。** Package.swift は
+      # YatateFFI.xcframework を binaryTarget として指してをり、それは生成物である
+      # （scripts/build-apple-ffi.sh・docs/ime/cross-platform.md M5-b2）。
+      # Apple の五つのターゲットは build-apple-ffi.sh が足りない分だけ入れる。
+      - name: 核を Apple の静的ライブラリへ組む
+        run: ./scripts/build-apple-ffi.sh --release
+
       - name: プロジェクト生成
         working-directory: ios
         run: xcodegen generate

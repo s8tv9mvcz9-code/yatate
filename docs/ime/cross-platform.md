@@ -13,6 +13,9 @@
 > `cargo test` が流してゐる。仮名 bigram は Swift と Rust が**同じ一つのデータ**
 > （`core/data/kana_bigram.txt`）から起こされるやうになつた。
 > CI は ubuntu（課金 1 倍）で、生成物の鮮度ゲートつき（§6・§7・§10）。
+> **M5-b2 と M6 も入つた（2026-08-05）** — `apple/` が核を素の C ABI で出し、
+> iOS の `YatateCore` は手写しを捨てて核の呼び出しになり、macOS には
+> 変換と候補窓を持つ IMKit の入力方式が建つた。**uniffi は採らなかつた**（§5）。
 > **M7 の骨組みも入つた** — `windows/`（TSF 殻）が生まれ、OS を知らない頭脳
 > （`session`）は ubuntu で試験でき、COM の入口は
 > `cargo check --target x86_64-pc-windows-gnu` で型検査してゐる。
@@ -20,7 +23,7 @@
 > macOS も Android も同じ物を要るので核へ移した（殻に頭脳を置かない）。
 > さらに **Swift をベクトルに従はせる関門**（`ios/YatateCore/Tests/.../ParityTests.swift`）を
 > 敷いた——検証は macOS CI がやるので、Mac が手元に無くても守れる。
-> 残るは Mac の要る M5-b（uniffi 束縛で iOS を核へ載せ替へ）と M6（macOS 殻）。
+> その関門は M5-b2 の**移行が挙動を変へてゐないこと**の証明にそのまま使へた。
 
 ## 1. 何が標準化できないのか — IME といふ部品の性質
 
@@ -54,7 +57,7 @@ Windows では TSF という**native な殻**を持ち、変換エンジンと�
 
 | 層 | 中身 | 行数 | 標準化 |
 |---|---|---|---|
-| 生成テーブル | `KyujiTable.swift`（248 字）・`KanaBigram.swift` | 360 | **可**（機械生成） |
+| 生成テーブル | `KyujiTable.swift`（248 字）・`KanaBigram.swift` | 360 | **可**（機械生成。M5-b2 で核へ移り、Swift 側からは消えた） |
 | 決定的核 | `Gojuon` `Composer` `Kehai` `Sumi` | 245 | **可**（本書の提案） |
 | 殻（UI） | `FutakudariView` `KeyboardViewController` | 293 | 不可（OS ごと） |
 
@@ -88,7 +91,7 @@ graph TD
 
 | 層 | 標準化 | 実装言語（提案） | 備考 |
 |---|---|---|---|
-| **L0 表** | ✅ 完全 | 生成物（Rust/Swift/…） | 現行の `gen_swift_tables.py` の一般化 |
+| **L0 表** | ✅ 完全 | 生成物（Rust 一枚） | かつては Swift へも写してゐた。M5-b2 で核の一枚になつた |
 | **L1 決定的ロジック** | ✅ 完全 | **Rust 一本** | 本書の核心。今は Swift に手書きされてゐる |
 | **L2 変換エンジン** | △ 条件付き | Rust（辞書は共通形式） | AzooKey（Swift・iOS 専用）を使ふ限り iOS だけ別 — §5 |
 | **殻** | ❌ 不可 | Swift / Swift / Rust / Kotlin | OS の入力機構そのもの |
@@ -121,6 +124,19 @@ graph TD
     macOS / Windows しかない。つまり macOS 版は「iOS の劣化移植」ではなく、
     **設計の原点を初めて実装する**仕事である。文机モードも同じで、
     大画面の紙面ステートマシンは元々 macOS を想定して書かれてゐる。
+
+!!! success "macOS の殻が建つた（2026-08-05・M6）"
+    `macos/YatateIME/` に IMKit の入力方式が入つた。運指は **Windows 殻と一字一句同じ**で、
+    Space＝変換／次の候補・Enter＝確定・Esc/BS＝仮名へ戻す・←→＝文節・
+    Shift+←→＝区切り修正・↑↓＝候補である。
+
+    | 事 | どうしたか |
+    |---|---|
+    | 変換の頭脳 | 一つも持たない。核の `henkan` を駆動するだけ（**四枚目の手写しを作らない**） |
+    | 注目文節 | `focus_range()` を marked text の下線に落とす。**Unicode スカラ → UTF-16 の換算を挟む**（核は scalar で、IMKit は UTF-16 で数へる） |
+    | 候補窓 | `IMKCandidates` ではなく非活性の `NSPanel`（`.nonactivatingPanel`）。選択の手綱を framework に渡すと核と二重管理になる |
+    | 数字で候補を選ぶ | **やらない。** 1〜0 は原器の第一の段（と て つ ち た／お え う い あ）なので、重ねると無音の誤爆になる |
+    | 署名・公証 | **未了。** 手元では `macos/install-ime.sh` で入る |
 
 ### macOS（IMKit）のハードル
 
@@ -207,6 +223,18 @@ Fcitx5 は「エンジンを差す」構造で、Rust 製の日本語 IME 先行
 2. **Swift と Kotlin へ機械的に橋を架けられる。** Mozilla の **uniffi** は一つの Rust クレートから
    Swift・Kotlin・Python の束縛を生成し、Firefox のモバイル／デスクトップで実運用されてゐる。
    Kotlin Multiplatform 向けの第三者束縛もある。
+
+   !!! warning "uniffi は結局採らなかつた（2026-08-05・実装の段で翻した）"
+       Apple 側を実装する段になつて、**素の `extern "C"` で足りる**と判つた。
+       核の入出力は「文字を入れる／文字列を貰ふ」だけで、それ以上の型を運んでゐない。
+       uniffi を採ると ①核（`yatate-core`）の**依存ゼロ方針**に手を入れるか、
+       さもなくば束縛用の中間 crate を結局書くことになり、②生成器と実行時ライブラリの
+       版が道具立てとして増える。得るものが無い。
+
+       `web/`（wasm）が既に素の C ABI で核に触つてゐたので、`apple/` もそれに揃へた。
+       いま**四つの殻（web・Windows・macOS・iOS）が同じ形で核に触る**——
+       Windows は Rust なので直に、他は C ABI で。**道具立ては cargo だけ**である。
+       Android（M8）の JNI も同じ判断で通せる。
 3. **キーボード拡張のメモリ予算に合ふ。** `staticlib` で iOS へ静的リンクでき、
    ランタイムを持ち込まない。GC も VM も無い。
 4. **決定的核はまさに Rust が得意な仕事である。** 純関数・表・状態機械・パーサ。
@@ -252,7 +280,7 @@ yatate/docs/ime/*.md       ← 同じ 8 ファイル（現在、内容は同一�
 |---|---|---|
 | 旧字表・仮名の決定的ロジック | bungo-rag `app/kyuji.py`（正）＋ yatate `ssot/kyuji.py`（写し） | **yatate `core/`（Rust）が正** |
 | サーバ（bungo-rag） | Python 実装 | **黄金ベクトルで従属**（当面）→ 将来 PyO3 wheel |
-| 各 OS の殻 | Swift 手書き | **束縛は生成物**（uniffi） |
+| 各 OS の殻 | Swift 手書き | **束縛は素の C ABI**（`apple/`・`web/`） |
 | IME 設計書 | 両リポに同内容 | **yatate が正**・bungo-rag はリンク |
 
 理由:
@@ -266,7 +294,7 @@ yatate/docs/ime/*.md       ← 同じ 8 ファイル（現在、内容は同一�
 
 ### 黄金ベクトル（parity vectors）といふ機械ゲート
 
-現行の「生成物の鮮度チェック」（`gen_swift_tables.py` を再実行して `git diff --exit-code`）を、
+当時の「生成物の鮮度チェック」（生成器を再実行して `git diff --exit-code`）を、
 **ロジックにも効く形へ一般化**する。
 
 ```
@@ -364,8 +392,8 @@ M0〜M4 は [roadmap.md](./roadmap.md) の通り（iOS）。本書はその先�
 |---|---|---|
 | **M5-a 核の新設**（**済**） | `core/`（Rust・依存ゼロ）に旧字変換（`to_kyuji` / `to_kyuji_body` / `KyujiStream`）・五十音の地図・作業帯・**墨の氣配**を実装。表は `gen_rust_tables.py`（旧字）と `gen_bigram_tables.py`（仮名 bigram・Swift と共通のデータから）で生成。黄金ベクトルは Python（表）と核（ロジック）が書く。`core-ci.yml`（ubuntu・鮮度ゲートつき） | ✅ `cargo test` 26 件 green・再生成で差分なし |
 | **M5-b1 Swift をベクトルに従はせる**（**済**） | `ParityTests.swift` が `core/vectors/*.json` を読み、Swift の手書き実装（旧字表・五十音・氣配）が核と同じ答へを出すかを検査。**検証は macOS CI**（公開リポなので無料枠） | ✅ Swift と核が同じ表・同じ幾何・同じ氣配を返す |
-| **M5-b2 iOS の載せ替へ** | uniffi で Swift 束縛を生成し、`YatateCore` の手書き実装を核の呼び出しへ差し替へる | iOS の挙動が**ベクトル一致で不変**。`swift test` と `cargo test` が両方 green |
-| **M6 macOS** | IMKit 殻（Swift）。**配列は核の `genki` を呼ぶだけ**（実装済み）。Developer ID 署名＋notarize の配布経路 | 自分の Mac で常用でき、原器がそのまま打てる |
+| **M5-b2 Apple の載せ替へ**（**済**） | `apple/`（新 crate）が核を**素の `extern "C"`** で出し、`scripts/build-apple-ffi.sh` が `YatateFFI.xcframework`（macos / ios / ios-simulator の三枝）へ束ねる。`YatateCore` の手書き実装は消え、Swift は核を呼ぶ薄い層になつた | ✅ 移行前から在つた黄金ベクトルの試験がそのまま green（＝**挙動が不変**）。`swift test` 27 件・`cargo test`（apple）21 件 |
+| **M6 macOS**（**済・署名待ち**） | IMKit 殻（Swift）。**配列も変換も核を呼ぶだけ**。Space で変換・←→ で文節・Shift+←→ で区切り・↑↓ で候補、注目文節は marked text の下線で引き分け、候補窓は非活性の `NSPanel` | ✅ `YatateIME.app` が組め、`macos/install-ime.sh` で `~/Library/Input Methods/` へ入る。**署名と公証は未了**（配るにはこれが要る） |
 | **M7-a Windows の骨組み**（**済**） | `windows/` に TSF 殻の枠。`session`（OS 非依存の頭脳）＋ `registration`（登録の値）＋ `tip`（COM の入口）。ubuntu で test / clippy / fmt ＋ `--target x86_64-pc-windows-gnu` の型検査 | ✅ `cargo test` 11 件 green・Windows ターゲットで check 通過 |
 | **M7-b Windows の実装**（**機械検証まで済・実機待ち**） | クラスファクトリ・DLL エクスポート・レジストリ登録・`ITfKeyEventSink`・`ITfComposition`。**JIS 物理鍵盤の翻訳（`keymap`）を新設**し、配列で意味の変はる 3 鍵を走査符号で引く。x64/ARM64 の配布物を CI が組む | ✅ `cargo test` 18 件・実 DLL のリンク・**エクスポート表の検査**が green。**残るは実機で打つこと**（候補窓・署名は未了） |
 | **W web 殻**（**済**） | `web/`（wasm）。核を素の `extern "C"` で出し、`KeyboardEvent.code` で原器を打つ。鍵の物理位置は核の `kagi` へ一本化し、Windows 殻と一枚の地図を共有する。手修正を `localStorage` へ覚える | ✅ `cargo test` 13 件・wasm の出口検査・**import が一つも無いこと**の検査が green。実ブラウザで打鍵→変換→学習まで通した |

@@ -1,6 +1,6 @@
 // 自動生成 — 手で編集しないこと。
 // SSOT: core/data/kana_bigram.txt（青空文庫 旧字旧仮名 23 作品の仮名連）
-// 総文字数 136,266・生成: scripts/gen_bigram_tables.py（Swift 版と同じデータから起こす）
+// 総文字数 136,266・生成: scripts/gen_bigram_tables.py
 
 /// 前字 → [(次字, 度数)]（度数降順）。`"^"` は仮名連の開始分布。
 ///

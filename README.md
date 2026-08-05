@@ -39,14 +39,28 @@
 
 ## つくる
 
+**まづ核を組む。** iOS も macOS も、中身は Rust の核（`core/`）である
+（[M5-b2](docs/ime/cross-platform.md) §10）。Swift はそれを呼ぶ薄い層でしかない:
+
 ```bash
 brew install xcodegen
+./scripts/build-apple-ffi.sh     # 核 → YatateFFI.xcframework（生成物・git に入れない）
 cd ios && xcodegen generate      # Yatate.xcodeproj が出来る
 ```
 
 ```bash
-cd ios/YatateCore && swift test  # 決定的核の検証（シミュレータ不要）
+cd ios/YatateCore && swift test  # 核へ載せた Swift の検証（シミュレータ不要）
 cd ios && ./build-device.sh      # 実機へ署名ビルド＋導入
+```
+
+xcframework を組む前に `swift test` を叩くと、SPM が「artifact が無い」と言つて止まる。
+壊れてゐるのではなく、**上の一行を先に走らせよ**といふ意味である。
+
+**macOS** — 文机（アプリ）と、原器を物理鍵盤で打つ入力方式（IMKit）:
+
+```bash
+cd ios && xcodebuild build -project Yatate.xcodeproj -scheme YatateMac -destination 'platform=macOS'
+./macos/install-ime.sh           # 入力方式を ~/Library/Input Methods/ へ（要ログインし直し）
 ```
 
 **共有核（`core/`・Rust）** — macOS・Windows・Android へ広げるための一つの核。
@@ -58,32 +72,37 @@ cd windows && cargo test         # Windows 殻の頭脳（OS 非依存の部分�
 cd windows && cargo check --target x86_64-pc-windows-gnu   # COM の入口の型検査
 ```
 
-機械生成物は Python が SSOT で、Swift と Rust は写し。SSOT を変へたら再生成する
-（CI が鮮度を検査して、写しが古いままなら落とす）:
+機械生成物は Python かデータファイルが SSOT で、核の表はその写し。SSOT を変へたら
+再生成する（CI が鮮度を検査して、写しが古いままなら落とす）:
 
 ```bash
-python3 scripts/gen_swift_tables.py     # ssot/kyuji.py → Generated/KyujiTable.swift
 python3 scripts/gen_rust_tables.py      # ssot/kyuji.py → core/src/generated/kyuji_table.rs
 python3 scripts/gen_parity_vectors.py   # ssot/kyuji.py → core/vectors/kyuji.json（黄金ベクトル）
-python3 scripts/gen_bigram_tables.py    # core/data/kana_bigram.txt → Swift と Rust の bigram 表
+python3 scripts/gen_bigram_tables.py    # core/data/kana_bigram.txt → core/src/generated/kana_bigram.rs
+python3 scripts/gen_jisho_tables.py     # core/data/jisho.tsv → core/src/generated/jisho_table.rs
 python3 scripts/gen_yatate_ngram.py     # 青空文庫 → core/data/kana_bigram.txt（要通信）＋上の表
-cd core && cargo run --bin gen-vectors  # 核 → core/vectors/{gojuon,kehai}.json
+cd core && cargo run --bin gen-vectors  # 核 → core/vectors/{gojuon,kehai,genki,kagi,bunsetsu}.json
 ```
 
-仮名 bigram は Swift と Rust が**同じ一つのデータ**から起こされる。別々に収穫すると
-青空文庫のカタログの変化で二つの表が静かにずれ、iOS と Windows で違ふ絵になるため。
+**表は一枚しか無い。** かつては同じ旧字表と bigram を Swift へも生成してゐたが、
+M5-b2 で殻が核を直に呼ぶやうになり、写しを置く理由が消えた。
 
 ## 構成
 
 ```
 core/               共有核（Rust・依存ゼロ）→ core/README.md
-                    旧字変換・五十音の地図・原器の配列・墨の氣配・入力の状態機械
-                    data/    仮名 bigram の元データ（Swift・Rust 双方の表の出所）
+                    旧字変換・五十音の地図・原器の配列・墨の氣配・入力と変換の状態機械
+                    data/    仮名 bigram と辞書の元データ（核の表の出所）
                     vectors/ 黄金ベクトル（表は Python が、ロジックは核が書く）
-windows/            Windows の殻（TSF・骨組み）→ windows/README.md
+apple/              核を Apple へ出す束縛（素の C ABI）→ apple/README.md
+windows/            Windows の殻（TSF）→ windows/README.md
+web/                web の殻（wasm）→ web/README.md
+macos/
+  YatateMacApp.swift  文机の macOS 版（FuzukueView は iOS と同一のソース）
+  YatateIME/        入力方式（IMKit）— 原器を物理鍵盤で打つ → macos/YatateIME/README.md
 ios/
-  Sources/          ホストアプリ（有効化の案内・文机）。通信コードは無い
-  YatateCore/       iOS の決定的核（行×段の地図・旧字変換・墨の氣配）。アプリと拡張が共有
+  Sources/          ホストアプリ（有効化の案内・文机・原器の稽古場）。通信コードは無い
+  YatateCore/       核への入口（Swift）。**表もロジックも持たない**。アプリ・拡張・macOS が共有
   YatateKeyboard/   キーボード拡張（com.apple.keyboard-service）
 ssot/               新字体→旧字体 248 字の対応表（Swift・Rust 双方の生成元）
 scripts/            テーブル生成・黄金ベクトル生成・アイコン生成・リリース仕込み

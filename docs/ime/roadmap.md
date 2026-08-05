@@ -21,7 +21,9 @@
 - 書き下ろしスライド（段梯子・detent 触覚）＋右逸らし濁点・左逸らし半濁/小書き。
 - ん・句読点・数字記号面・地球儀キー（`needsInputModeSwitchKey` 対応）・削除・確定。
 - 作業帯（文節カードなしの素朴版）と、確定時の旧字確定（`KyujiTable`・T0）。
-- パリティ基盤: `gen_swift_tables.py`／`gen_parity_vectors.py`／`YatateCoreTests`、
+- パリティ基盤: `gen_parity_vectors.py`／`YatateCoreTests`（当時は
+  `gen_swift_tables.py` が Swift へも表を写してゐた。M5-b2 で表は核の一枚になり、
+  この生成器は役目を終へて消えた）、
   `eval-ci`（鮮度チェック）と `ios-ci`（swift test）への組み込み。
 - **出口条件**: フルアクセス OFF・機内モードで、メール一通を歴史的仮名遣ひで
   書き切れること（仮名鍵盤として自立）。ゐ・ゑ・ぢ・づが一動作で出ること。
@@ -83,12 +85,27 @@
 |---|---|---|
 | M5-a | 共有核 `core/`（Rust）— 旧字・五十音・**原器**・氣配・状態機械・黄金ベクトル | **済** |
 | M5-b1 | Swift をベクトルに従はせる（macOS CI が検証） | **済** |
-| M5-b2 | uniffi で iOS を核へ載せ替へ | Mac が要る |
-| M6 | macOS 殻（IMKit）— **原器が帰る場所** | Mac が要る |
+| M5-b2 | iOS/macOS を核へ載せ替へ（**素の C ABI**。uniffi は採らなかつた） | **済** |
+| M6 | macOS 殻（IMKit）— **原器が帰る場所**。変換と候補窓つき | **済**（署名・公証は未了） |
 | M7-a / M7-b | Windows 殻（TSF）の骨組み / 実装 | 骨組みは**済**・実装は Windows 機が要る |
-| M8 / M9 | Android 殻（IMS）／ 設定・辞書の同期 | 未着手 |
+| M8 / M9 | Android 殻（IMS）／ 設定・辞書の同期 | M8 は**済**・M9 は未着手 |
 
-**配列も氣配も旧字確定も、もう核に在る**ので、残るのは殻を書く仕事である。
+**配列も氣配も旧字確定も変換も、もう核に在る**ので、残るのは殻を書く仕事である。
+
+!!! success "Apple 側が核へ載つた（2026-08-05）"
+    `apple/`（新しい crate）が核を**素の `extern "C"`** で出し、
+    `scripts/build-apple-ffi.sh` が三つの枝（macos / ios / ios-simulator）を持つ
+    `YatateFFI.xcframework` へ束ねる。`ios/YatateCore/` の Swift は
+    **表もロジックも一つも持たない薄い層**になつた——原器も旧字 248 字も氣配の重みも、
+    いま Swift 側からは核を呼んで得てゐる。
+
+    挙動が変はつてゐないことは、**移行前から在つた黄金ベクトルの試験がそのまま緑**
+    であることで示される（`ParityTests`・`KagiGenkiParityTests`）。
+    新たに `HenkanParityTests` が変換の段（文節・候補・費用・確定文）を
+    `core/vectors/bunsetsu.json` で縛る。
+
+    **設計は uniffi を想定してゐたが、実装の段でやめた**——理由は
+    [cross-platform.md](./cross-platform.md) §5。
 
 ## 遠景（なほ設計だけ）
 

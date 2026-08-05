@@ -1,0 +1,31 @@
+[package]
+name = "yatate-apple"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "矢立の Apple 束縛 — 核を静的ライブラリとして Swift へ出す（docs/ime/cross-platform.md M5-b2）"
+license = "MIT"
+repository = "https://github.com/s8tv9mvcz9-code/yatate"
+
+[lib]
+name = "yatate_apple"
+# staticlib … iOS/macOS へ静的リンクする（ランタイムを持ち込まない）
+# lib       … cargo test を ubuntu で回すため
+crate-type = ["staticlib", "lib"]
+
+[dependencies]
+# 決定的核。原器も氣配も旧字確定も辞書も変換も、ここから来る（束縛は運ぶだけ）。
+yatate-core = { path = "../core" }
+
+# **uniffi を使はない。**
+#
+# 核の入出力は「文字を入れる／文字列を貰ふ」だけなので、素の `extern "C"` で足りる
+# ——web 殻（web/src/lib.rs）が wasm で既にさうしてゐるのと同じ形である。
+# uniffi を入れると核の依存が増え、「$0・資格情報不要でテストできる」性質が痩せる
+# （core/Cargo.toml の依存ゼロ方針）。道具立ては cargo だけで済む。
+
+[profile.release]
+opt-level = "z"      # キーボード拡張のメモリ予算を優先（速度より大きさ）
+lto = true
+strip = true
+panic = "abort"      # 殻へ巻き戻せないので、落ちるなら即座に落ちる

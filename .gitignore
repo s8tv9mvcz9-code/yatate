@@ -10,3 +10,15 @@ __pycache__/
 
 # Rust（核と殻。crate が増えても取り零さないやう名前で拾ふ）
 target/
+
+# 核を Apple へ載せた静的ライブラリ（scripts/build-apple-ffi.sh が組む生成物）。
+# 表もコードも再生成できるのがこのリポジトリの流儀なので、バイナリだけ例外にしない。
+ios/YatateCore/YatateFFI.xcframework/
+
+# Xcode（xcodegen generate が起こすもの・ビルド中間物）
+ios/build/
+ios/build-device/
+ios/Yatate.xcodeproj/project.xcworkspace/xcuserdata/
+ios/Yatate.xcodeproj/xcuserdata/
+.build/
+DerivedData/

@@ -146,8 +146,10 @@ IME は起動時（と日次）に取得してキャッシュし、無ければ�
 このリポジトリで既に一度防ぎ方が確立してゐる（3PF の「振舞ひパリティをゲートで守る」）ので、
 同じ機構を敷く:
 
-1. `scripts/gen_swift_tables.py` — `kyuji.py` の対応表と `KANA_INFO` から Swift ソース
-   （`YatateCore/Generated/*.swift`）を機械生成する。手書き禁止。
+1. `scripts/gen_rust_tables.py` — `kyuji.py` の対応表から核の Rust ソース
+   （`core/src/generated/*.rs`）を機械生成する。手書き禁止。
+   （M5-b2 より前は `gen_swift_tables.py` が Swift へも同じ表を写してゐたが、
+   殻が核を直に呼ぶやうになつて写しが要らなくなり、生成器ごと消えた。）
 2. `scripts/gen_parity_vectors.py` — Python 実装に代表入力（境界例・曖昧仮名・空・最長）を
    食はせた入出力対を `eval/parity/kana_vectors.json` に吐く。
 3. Swift 側のテスト（`YatateCoreTests`）が同じベクトルを読み、出力一致を検査する。

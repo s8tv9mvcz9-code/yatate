@@ -1,41 +1,74 @@
-// 二行（ふたくだり）配列 — docs/ime/layout.md §2 の M0 実装（楷のみ）＋ VLA 層 A0。
+// 二行（ふたくだり）配列 — docs/ime/layout.md §2 の実装（楷）＋ VLA 層 A0。
 // 右列＝第一の行（あかさたな）、左列＝第二の行（はまやらわ）。
 // 段は「書き下ろし」: 押へて下へ滑らせると梯子が降り、右肩への逸らしが濁点になる。
 // 鍵には「墨の気配」（次の一打の分布）が滲み、最有力の一手へ「筆脈」が走る
 // （docs/ime/vla.md — コーパス bigram の決定的射影。訓練なし・端末内）。
+//
+// ## 変換は核が持つ
+//
+// 硝子の鍵盤は原器の写像を経ないので、仮名を**直に**核へ積む（`insertKana`）。
+// そこから先——文節分割・候補の並べ方・区切り修正・旧字確定——は
+// macOS 殻・Windows 殻・web 殻と**同じ一つの核**（core/src/henkan.rs）である。
+// 拡張はネットワークを使はない。辞書も変換も端末の中で完結する。
 
 import SwiftUI
 import YatateCore
 
 final class KeyboardState: ObservableObject {
-    @Published var composer = Composer()
+    /// 仮名と変換を通した状態機械。**頭脳はここに無く、核に在る。**
+    private let henkan = Henkan()
+
+    @Published var preedit = ""
+    @Published var converting = false
+    @Published var candidates: [String] = []
+    @Published var chosen = 0
     @Published var needsGlobe = false
     @Published var field: ActionField = Kehai.field(after: nil)
     @Published var lastKey: KeyID? = nil
+
     var onInsert: (String) -> Void = { _ in }
     var onDeleteBackward: () -> Void = {}
     var onGlobe: () -> Void = {}
 
+    var isEmpty: Bool { preedit.isEmpty }
+
     func tap(_ kana: String, from key: KeyID) {
-        composer.append(kana)
         lastKey = key
-        refresh()
+        apply(henkan.insertKana(kana))
     }
 
     func delete() {
-        if composer.isEmpty { onDeleteBackward() } else { composer.deleteLast() }
-        refresh()
+        guard henkan.isComposing else {
+            onDeleteBackward()
+            return
+        }
+        apply(henkan.backspace())
+    }
+
+    /// 変換 — 未変換なら文節へ分け、変換中なら次の候補へ（macOS・Windows の Space）。
+    func convert() {
+        apply(henkan.convert())
+    }
+
+    /// 候補を番号で選ぶ（硝子には候補を指で突く道がある）。
+    func choose(_ index: Int) {
+        apply(henkan.choose(index))
     }
 
     func commit() {
-        guard !composer.isEmpty else { return }
-        onInsert(composer.commit())
+        guard henkan.isComposing else { return }
         lastKey = nil
-        refresh()
+        apply(henkan.commit())
     }
 
-    private func refresh() {
-        field = Kehai.field(after: composer.text.last)
+    /// 核が返した指示のとほりに描く。**判断はここでしない。**
+    private func apply(_ act: Act) {
+        if let text = act.committed, !text.isEmpty { onInsert(text) }
+        preedit = henkan.preedit
+        converting = henkan.phase == .henkan
+        candidates = henkan.candidates.map(\.surface)
+        chosen = henkan.chosen
+        field = henkan.field
     }
 }
 
@@ -47,12 +80,14 @@ private struct KeyFramePreference: PreferenceKey {
     }
 }
 
-private extension View {
-    func trackFrame(_ id: KeyID) -> some View {
-        background(GeometryReader { g in
-            Color.clear.preference(key: KeyFramePreference.self,
-                                   value: [id: g.frame(in: .named("yatate"))])
-        })
+extension View {
+    fileprivate func trackFrame(_ id: KeyID) -> some View {
+        background(
+            GeometryReader { g in
+                Color.clear.preference(
+                    key: KeyFramePreference.self,
+                    value: [id: g.frame(in: .named("yatate"))])
+            })
     }
 }
 
@@ -64,13 +99,16 @@ struct FutakudariView: View {
     var body: some View {
         VStack(spacing: 4) {
             workingStrip
+            if state.converting && state.candidates.count > 1 {
+                candidateStrip
+            }
             ZStack {
                 HStack(spacing: 5) {
                     functionColumn
-                    gyoColumn(Gojuon.secondLine)   // 第二の行（は ま や ら わ）
-                    gyoColumn(Gojuon.firstLine)    // 第一の行（あ か さ た な）— 画面右端
+                    gyoColumn(Gojuon.secondLine)  // 第二の行（は ま や ら わ）
+                    gyoColumn(Gojuon.firstLine)  // 第一の行（あ か さ た な）— 画面右端
                 }
-                hitsumyaku                          // 筆脈 — 最有力の一手への淡い一画
+                hitsumyaku  // 筆脈 — 最有力の一手への淡い一画
             }
             .coordinateSpace(name: "yatate")
             .onPreferenceChange(KeyFramePreference.self) { frames = $0 }
@@ -79,25 +117,55 @@ struct FutakudariView: View {
         .background(Sumi.paper(scheme).opacity(0.6))
     }
 
-    // 作業帯 — 確定前の仮名。確定で旧字体が機械確定される（T0）。
+    // 作業帯 — 確定前の文。変換中は**新字体の表記**が出て、確定で旧字体になる。
     private var workingStrip: some View {
-        HStack {
-            Text(state.composer.isEmpty ? "矢立 ─ 楷" : state.composer.text)
+        HStack(spacing: 6) {
+            Text(state.isEmpty ? "矢立 ─ 楷" : state.preedit)
                 .font(.system(size: 18))
-                .foregroundStyle(state.composer.isEmpty ? .secondary : .primary)
+                .foregroundStyle(state.isEmpty ? .secondary : .primary)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Button(action: state.commit) {
-                Text("確定")
-                    .font(.system(size: 15, weight: .semibold))
-                    .padding(.horizontal, 14).padding(.vertical, 7)
-                    .background(Color.accentColor.opacity(0.15))
-                    .clipShape(RoundedRectangle(cornerRadius: 7))
-            }
+            stripButton("変換", enabled: !state.isEmpty, action: state.convert)
+            stripButton("確定", enabled: !state.isEmpty, action: state.commit)
         }
         .padding(.horizontal, 8)
         .frame(height: 40)
         .background(Sumi.slip(scheme), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func stripButton(_ label: String, enabled: Bool, action: @escaping () -> Void)
+        -> some View
+    {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 15, weight: .semibold))
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .background(Color.accentColor.opacity(enabled ? 0.15 : 0.05))
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+        }
+        .disabled(!enabled)
+    }
+
+    /// 候補の並び。**核が並べた順**（費用の昇順）をそのまま描く。
+    private var candidateStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(Array(state.candidates.enumerated()), id: \.offset) { i, surface in
+                    Button { state.choose(i) } label: {
+                        Text(surface)
+                            .font(.system(size: 18))
+                            .padding(.horizontal, 10).padding(.vertical, 5)
+                            .background(
+                                i == state.chosen
+                                    ? Color.accentColor.opacity(0.28) : Sumi.key(scheme),
+                                in: RoundedRectangle(cornerRadius: 6))
+                            .foregroundStyle(.primary)
+                    }
+                }
+            }
+            .padding(.horizontal, 4)
+        }
+        .frame(height: 36)
     }
 
     private func gyoColumn(_ line: [Gyo]) -> some View {
@@ -129,16 +197,20 @@ struct FutakudariView: View {
         .frame(width: 64)
     }
 
-    private func functionKey(_ label: String, id: KeyID?,
-                             action: @escaping () -> Void) -> some View {
+    private func functionKey(
+        _ label: String, id: KeyID?,
+        action: @escaping () -> Void
+    ) -> some View {
         let ink = id.flatMap { state.field.ink[$0] } ?? 0
         return Button(action: action) {
             Text(label)
                 .font(.system(size: 16))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Sumi.fringe(scheme), in: RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8)
-                    .fill(Sumi.ink(scheme, ink)))             // 墨の気配（暗所は白抜き）
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Sumi.ink(scheme, ink))
+                )  // 墨の気配（暗所は白抜き）
                 .foregroundStyle(.primary)
         }
         .modifier(TrackIfPresent(id: id))
@@ -147,18 +219,22 @@ struct FutakudariView: View {
     // 筆脈 — 最後に触れた鍵から、最有力の次の鍵への気脈（vla.md §2）
     @ViewBuilder private var hitsumyaku: some View {
         if let from = state.lastKey, let to = state.field.peak, from != to,
-           let f = frames[from], let t = frames[to] {
+            let f = frames[from], let t = frames[to]
+        {
             Path { p in
                 let a = CGPoint(x: f.midX, y: f.midY)
                 let b = CGPoint(x: t.midX, y: t.midY)
                 // わづかに撓ませる（直線は機械の線、筆脈は生きた線）
-                let c = CGPoint(x: (a.x + b.x) / 2 + (a.y - b.y) * 0.12,
-                                y: (a.y + b.y) / 2 + (b.x - a.x) * 0.12)
+                let c = CGPoint(
+                    x: (a.x + b.x) / 2 + (a.y - b.y) * 0.12,
+                    y: (a.y + b.y) / 2 + (b.x - a.x) * 0.12)
                 p.move(to: a)
                 p.addQuadCurve(to: b, control: c)
             }
-            .stroke(Sumi.hitsumyaku(scheme),
-                    style: StrokeStyle(lineWidth: 2, lineCap: .round))
+            .stroke(
+                Sumi.hitsumyaku(scheme),
+                style: StrokeStyle(lineWidth: 2, lineCap: .round)
+            )
             .allowsHitTesting(false)
         }
     }
@@ -183,8 +259,8 @@ struct KanaKeyView: View {
 
     @State private var translation: CGSize? = nil
 
-    private let stepH: CGFloat = 34          // 梯子一段の高さ
-    private let deflectW: CGFloat = 26       // 逸らしの閾値
+    private let stepH: CGFloat = 34  // 梯子一段の高さ
+    private let deflectW: CGFloat = 26  // 逸らしの閾値
 
     private var currentDan: Int {
         guard let t = translation else { return 0 }
@@ -203,8 +279,10 @@ struct KanaKeyView: View {
             .font(.system(size: 22))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Sumi.key(scheme), in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8)
-                .fill(Sumi.ink(scheme, ink)))                 // 墨の気配（暗所は白抜き）
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Sumi.ink(scheme, ink))
+            )  // 墨の気配（暗所は白抜き）
             .overlay(alignment: .topLeading) { ladder }
             .contentShape(Rectangle())
             .gesture(
@@ -229,8 +307,9 @@ struct KanaKeyView: View {
                         .font(.system(size: 19))
                         .frame(width: 36, height: 30)
                         .background(
-                            dan == currentDan ? Color.accentColor.opacity(0.30)
-                                              : Sumi.ladderStep(scheme, ink: danInk[dan]),
+                            dan == currentDan
+                                ? Color.accentColor.opacity(0.30)
+                                : Sumi.ladderStep(scheme, ink: danInk[dan]),
                             in: RoundedRectangle(cornerRadius: 5))
                 }
             }

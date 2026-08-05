@@ -5,7 +5,8 @@ gen_rust_tables.py — Python SSOT から Rust テーブルを機械生成する
 生成物: core/src/generated/kyuji_table.rs
 SSOT:   ssot/kyuji.py の KYUJI_MAP（新字体→旧字体 1:1 写像）と AMBIGUOUS_SHINJI
 
-`scripts/gen_swift_tables.py` の Rust 版で、**同じ SSOT から二つの写しを作る**
+かつて在つた `gen_swift_tables.py`（Swift 版）の Rust 版だつたが、M5-b2 で
+Swift 側の写しが消えたので、**いまはここが唯一の写し**である
 （docs/ime/cross-platform.md §6）。手書き禁止 — 再実行で常に上書きされる。
 CI は再生成して `git diff --exit-code` することで生成物の鮮度を守る。
 

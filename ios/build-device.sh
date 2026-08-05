@@ -31,10 +31,16 @@ fi
 CONFIG="${CONFIG:-Debug}"
 DERIVED="build-device"
 
+# 核（Rust）を Apple の静的ライブラリへ。**これを飛ばすと SPM が
+# 「artifact が無い」で止まる**（Package.swift が xcframework を指してゐる）。
+echo "▶ 核を組む（scripts/build-apple-ffi.sh）"
+../scripts/build-apple-ffi.sh --release >/dev/null
+
 echo "▶ xcodegen generate"
 xcodegen generate >/dev/null
 
-echo "▶ 署名ビルド（team=$TEAM, config=$CONFIG）"
+# 全角の括弧の直前は波括弧で囲む（囲まないとロケール次第で変数名に呑まれる）
+echo "▶ 署名ビルド（team=$TEAM, config=${CONFIG}）"
 set +e
 xcodebuild build \
   -project Yatate.xcodeproj -scheme Yatate \

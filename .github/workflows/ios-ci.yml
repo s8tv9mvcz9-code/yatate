@@ -1,22 +1,33 @@
-name: iOS CI
-# ⚠ paths を ios/** だけに狭めないこと。二つの関門がここに掛かつてゐる:
-#   ① 生成物の鮮度 — 「ssot/kyuji.py を変へたのに Generated/*.swift が古いまま」
-#   ② 黄金ベクトルとのパリティ — 「core/（Rust）が動いたのに Swift が追随してゐない」
-# 引き金に SSOT・核・生成スクリプトを含めないと、どちらも素通りになる。
+name: Apple CI
+# iOS と macOS の殻 —— **「組めるか」と「核と同じ答へを出すか」だけを見る**。
+#
+# 核（core/・Rust）と束縛（apple/）の中身の正しさは ubuntu（課金 1 倍）で
+# core-ci.yml が見終へてゐる。ここが macOS ランナー（**10 倍**）を使ふ理由は二つだけ:
+#
+#   ① 静的ライブラリが Apple の三つの枝ぶん組めて、Swift がリンクできるか
+#   ② Swift の口から出る答へが黄金ベクトルと一致するか（ParityTests）
+#
+# ⚠ paths を ios/** だけに狭めないこと。②のゲートは
+# 「core/ が動いたのに Swift が追随してゐない」を捕まへる関門で、
+# 引き金に核・束縛・SSOT・生成スクリプトを含めないと素通りになる。
 on:
   push:
     paths:
       - "ios/**"
+      - "macos/**"
+      - "apple/**" # C ABI の束縛（Swift はこれを呼ぶ）
+      - "core/**" # 黄金ベクトルと核の実体
       - "ssot/**"
-      - "core/**" # 黄金ベクトル（ParityTests が読む）と核の変更
-      - "scripts/gen_swift_tables.py"
+      - "scripts/build-apple-ffi.sh"
       - ".github/workflows/ios-ci.yml"
   pull_request:
     paths:
       - "ios/**"
+      - "macos/**"
+      - "apple/**"
+      - "core/**"
       - "ssot/**"
-      - "core/**" # 黄金ベクトル（ParityTests が読む）と核の変更
-      - "scripts/gen_swift_tables.py"
+      - "scripts/build-apple-ffi.sh"
       - ".github/workflows/ios-ci.yml"
 concurrency:
   group: ios-ci-${{ github.ref }}
@@ -32,21 +43,31 @@ jobs:
         run: |
           LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
           sudo xcode-select -s "$LATEST/Contents/Developer"
-      - name: swift test（YatateCore）
+
+      # ランナー像に cargo が在るかは像次第なので、**自分で据ゑる**
+      # （core-ci.yml と同じ流儀。--component は 1 つずつ渡す）。
+      # Apple の五つのターゲットは build-apple-ffi.sh が足りない分だけ入れる。
+      - name: Rust ツールチェーン
+        run: |
+          rustup toolchain install stable --profile minimal || \
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+              | sh -s -- -y --profile minimal --default-toolchain stable
+          source "$HOME/.cargo/env" 2>/dev/null || true
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          rustup default stable
+
+      # **これを忘れると SPM が「artifact が無い」で止まる。** Package.swift は
+      # YatateFFI.xcframework を binaryTarget として指してをり、それは生成物である。
+      - name: 核を Apple の静的ライブラリへ組む
+        run: ./scripts/build-apple-ffi.sh --release
+
+      - name: swift test（YatateCore ＝ 核へ載せた Swift）
         working-directory: ios/YatateCore
         run: swift test
+
       - name: Python 側の SSOT テスト
         run: python3 ssot/test_kyuji.py
-      # 生成物の鮮度ゲート — Python が SSOT、Swift は機械が写したもの。
-      # KanaBigram は青空文庫への通信が要る（数分）ので CI では回さない。
-      - name: 生成物が SSOT と同期してゐるか
-        run: |
-          python3 scripts/gen_swift_tables.py
-          if ! git diff --exit-code -- ios/YatateCore/Sources/YatateCore/Generated/; then
-            echo "::error::Generated/*.swift が ssot/kyuji.py と食ひ違つてゐます。"
-            echo "::error::python3 scripts/gen_swift_tables.py を実行して結果をコミットしてください。"
-            exit 1
-          fi
+
   build:
     runs-on: macos-14
     steps:
@@ -56,12 +77,51 @@ jobs:
           LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
           sudo xcode-select -s "$LATEST/Contents/Developer"
       - run: brew install xcodegen
+      # ランナー像に cargo が在るかは像次第なので、**自分で据ゑる**
+      # （core-ci.yml と同じ流儀。--component は 1 つずつ渡す）。
+      # Apple の五つのターゲットは build-apple-ffi.sh が足りない分だけ入れる。
+      - name: Rust ツールチェーン
+        run: |
+          rustup toolchain install stable --profile minimal || \
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+              | sh -s -- -y --profile minimal --default-toolchain stable
+          source "$HOME/.cargo/env" 2>/dev/null || true
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          rustup default stable
+
+      - name: 核を Apple の静的ライブラリへ組む
+        run: ./scripts/build-apple-ffi.sh --release
       - working-directory: ios
         run: xcodegen generate
-      - working-directory: ios
+
+      # iOS — 本体アプリと鍵盤拡張（拡張は本体に同梱されるので一度で両方組まれる）
+      - name: iOS（アプリ＋鍵盤拡張）
+        working-directory: ios
         run: >
           xcodebuild build
           -project Yatate.xcodeproj -scheme Yatate
           -sdk iphonesimulator
           -destination 'generic/platform=iOS Simulator'
+          CODE_SIGNING_ALLOWED=NO
+
+      # macOS — 文机（アプリ）
+      #
+      # ⚠ この一行が無かつたために、YatateMac は**一度も組まれないまま壊れてゐた**
+      # （../macos の再帰 glob が入力方式の main.swift を巻き込み、@main と衝突する）。
+      # 組まないターゲットは、在るだけで壊れる。
+      - name: macOS（文机）
+        working-directory: ios
+        run: >
+          xcodebuild build
+          -project Yatate.xcodeproj -scheme YatateMac
+          -destination 'platform=macOS'
+          CODE_SIGNING_ALLOWED=NO
+
+      # macOS — 入力方式（IMKit）
+      - name: macOS（IMKit の入力方式）
+        working-directory: ios
+        run: >
+          xcodebuild build
+          -project Yatate.xcodeproj -scheme YatateIME
+          -destination 'platform=macOS'
           CODE_SIGNING_ALLOWED=NO
