@@ -1,6 +1,6 @@
 # `macos/YatateIME/` — macOS の殻（IMKit テキストサービス）
 
-**ハード鍵盤で原器を打つための実装である。** Windows の TSF 殻
+**ハード鍵盤で原器を打ち、文語のまま変換するための実装である。** Windows の TSF 殻
 （[`windows/`](../../windows/README.md)）と対になる。設計は
 [`docs/ime/cross-platform.md`](../../docs/ime/cross-platform.md) §4、
 配列は [`docs/ime/layout.md`](../../docs/ime/layout.md) §1。
@@ -10,13 +10,15 @@ iOS のキーボード拡張は**ハードキーを受け取れない**ので、
 
 ## これは殻である
 
-配列（原器）も旧字確定も**一つも持たない**。すべて核（`YatateCore`）から来る。
-ここが受け持つのは macOS の作法だけ —— IMKit の契約と、鍵盤の翻訳。
+配列（原器）も、旧字確定も、文節分割も、候補の並べ方も**一つも持たない**。
+すべて核（`YatateCore` → [`core/`](../../core/README.md)・Rust）から来る。
+ここが受け持つのは macOS の作法だけ —— IMKit の契約と、鍵盤の翻訳と、板を出す位置。
 
 | ファイル | 中身 |
 |---|---|
 | `main.swift` | `IMKServer` を立てて待つ |
-| `YatateInputController.swift` | `IMKInputController` — 打鍵を受け、marked text を置く |
+| `YatateInputController.swift` | `IMKInputController` — 打鍵を核へ渡し、marked text を置く |
+| `CandidateWindow.swift` | 候補を並べる非活性の `NSPanel`（描くだけ） |
 | `Info.plist` | 入力ソースとしての名乗り（接続名・制御子・文字体系） |
 
 ## 鍵は kVK で引く — **英字（US）配列を前提とする**
@@ -36,9 +38,8 @@ US 配列の機で黙つて「さ」になる。例外も警告も出ない。�
 生まれず、「JIS か US か」を実行時に当てる必要も消える。
 
 英字配列でも原器の 33 鍵が要る物理位置はすべて在るので、**配列ごとの分岐は要らない**。
-地図の出所は核の [`Kagi.swift`](../../ios/YatateCore/Sources/YatateCore/Kagi.swift) 一枚で、
-Rust の [`core/src/kagi.rs`](../../core/src/kagi.rs) がその SSOT である
-（`KagiGenkiParityTests` が `core/vectors/kagi.json` で両者を縛る）。
+地図の出所は核の [`core/src/kagi.rs`](../../core/src/kagi.rs) 一枚である
+（`KagiGenkiParityTests` が `core/vectors/kagi.json` で縛る）。
 
 ## 打ち方（原器・英字配列）
 
@@ -59,31 +60,61 @@ JIS 機なら `=` は `^`、`'` は `:` と読み替へる（**同じ指の置�
   p b                      →   が （か＋濁点）
 ```
 
-Enter か Space で確定。**確定のとき新字体は旧字体へ機械で直る**（核の `toKyuji`）。
-Esc で取り消し、Delete で一字消し。
+## 運指 — **Windows 殻と一字一句同じ**
+
+| 鍵 | すること |
+|---|---|
+| `Space` | 未変換なら**変換**／変換中は**次の候補へ** |
+| `Enter` | 確定（**ここで旧字が定まる**） |
+| `Esc` `BS` | 変換を解いて仮名へ戻す（読みは失はない）／仮名の段なら捨てる |
+| `←` `→` | 注目する文節を移す |
+| `Shift+←` `Shift+→` | 注目文節を縮める／伸ばす |
+| `↑` `↓` | 前の／次の候補へ |
+| `Tab` | 確定して素通し（欄移動を奪はない） |
+
+**数字で候補を選ばせない。** 1〜0 は原器の第一の段（と て つ ち た／お え う い あ）で、
+そこに候補選択を重ねると「た を打たうとして候補が飛ぶ」といふ無音の事故になる。
+候補窓に番号を出さないのもそのためである。
+
+Shift は Ctrl/Alt とは別に見る。原器の前置シフトは `^` の**逐次打鍵**であつて
+同時押しではないので、Shift+矢印を区切り修正に使つても衝突しない。
+
+機能キーの kVK が原器の 33 鍵と重ならないことは `YatateCoreTests` が縛つてゐる
+——重なれば「文節を移さうとしたら と が入る」といふ、例外も警告も出ない事故になる。
+
+## 変換は核が持つ
+
+変換の状態機械は Rust の核（[`core/src/henkan.rs`](../../core/src/henkan.rs)）に在り、
+辞書引きと文節分割も同様（`core/src/jisho.rs`・`core/src/bunsetsu.rs`）。
+これを Swift へ手で写せば**四枚目の地図**になり、このリポジトリが繰り返し
+学んできた「二枚持つと必ずずれる」を自ら踏む。ゆゑにここは核を**駆動するだけ**である
+（束縛は [`apple/`](../../apple/README.md)）。
+
+二つだけ、殻の側に固有の仕事がある:
+
+- **注目文節の下線** — 核の `focus_range()` は **Unicode スカラ**で数へ、IMKit は
+  **UTF-16** で数へる。仮名と常用の漢字では一致するので気づきにくいが、
+  基本多言語面の外の字（𠮷 の類）が出た瞬間に下線がずれる。ずれた下線は
+  「どの文節を直してゐるか」を嘘で示すので、換算を挟んである。
+- **候補窓** — `IMKCandidates` は使はない。選択の手綱を framework が握ると
+  「Space で次へ・←→ で文節」といふ**核が定めた運指**と二重管理になるためである。
+  非活性のパネル（`.nonactivatingPanel`）でなければ、板が前に出た瞬間に
+  入力先のアプリが非活性になり打鍵が届かなくなる。
 
 ## 組んで入れる
 
-`Package.swift` は `YatateCore` を macOS 13 以降で組めるやうにしてある。
-入力方式は app bundle の形をしてゐる必要があるので、Xcode か `swiftc` で
-`YatateIME.app` を作り、`~/Library/Input Methods/` へ置く。
-
 ```bash
-# 例（Xcode を使はない最小の組み方）
-mkdir -p YatateIME.app/Contents/MacOS
-cp Info.plist YatateIME.app/Contents/
-swiftc -O \
-  -I ../../ios/YatateCore/.build/release/Modules \
-  main.swift YatateInputController.swift \
-  -framework Cocoa -framework InputMethodKit \
-  -o YatateIME.app/Contents/MacOS/YatateIME
-cp -R YatateIME.app ~/Library/Input\ Methods/
+./macos/install-ime.sh
 ```
 
-そのあと **ログアウトして入り直し**、システム設定 → キーボード → 入力ソース →
-「＋」→ 日本語 →「矢立（文語 IME）」を足す。`Ctrl+Space` で切り替へる。
+これが ①核を静的ライブラリへ組み ②`YatateIME.app` を作り
+③`~/Library/Input Methods/` へ置く。そのあと **ログアウトして入り直し**、
+システム設定 → キーボード → 入力ソース →「＋」→ 日本語 →「矢立（文語 IME）」を足す。
+`Ctrl+Space` で切り替へる。
 
-> 未署名である。手元の検証はこれで通るが、配るには署名と公証が要る。
+> **ログインし直しが要る**のは、`~/Library/Input Methods/` の走査が
+> ログインセッションの開始時に行はれるためである。置いただけでは一覧に出ない
+> ——「入れたのに出ない」の九割はこれ。
 
 ## うまくいかないときの見どころ
 
@@ -92,27 +123,14 @@ cp -R YatateIME.app ~/Library/Input\ Methods/
 | 入力ソース一覧に出ない | `~/Library/Input Methods/` に在るか／ログインし直したか／`Info.plist` の `ComponentInputModeDict` |
 | 切り替へても何も起きない | `InputMethodConnectionName` と `IMKServer` に渡す名が一致してゐるか |
 | 「し」が「さ」になる | `NSEvent.characters` を見てゐる経路が混ざつてゐないか（この殻は `keyCode` だけを見る） |
-| `=` を打つと `=` が入る | 前置シフトの打鍵を食ひ損ねてゐる（`.swallow` を `false` で返してゐないか） |
+| `=` を打つと `=` が入る | 前置シフトの打鍵を食ひ損ねてゐる（`Act.swallow` で `true` を返してゐるか） |
+| 候補窓が出ない | 候補が 1 つしか無いか、相手のアプリがカーソル矩形を答へないか（答へないときは**出さない**——迷子の板を隅に置くより、まし） |
 
 ## まだ無いもの（正直に）
 
 | 項目 | 現況 |
 |---|---|
-| **漢字変換・候補窓** | **無い。** 確定は仮名のまま（旧字は機械で直る） |
-| 表示属性（未確定の下線・色） | `kTSMHiliteSelectedRawText` のみ。共感覚（情調 → 伝統色）は未着手 |
-| 署名・公証 | 未署名 |
-
-### 変換をどう入れるか — 四枚目の手写しは作らない
-
-変換の状態機械は**すでに Rust の核に在る**（[`core/src/henkan.rs`](../../core/src/henkan.rs)：
-段の管理・候補送り・区切り修正）。辞書引きと文節分割も同様
-（`core/src/jisho.rs`・`core/src/bunsetsu.rs`、合はせて約 900 行）。
-
-これを Swift へ手で写せば**四枚目の地図**になり、このリポジトリが繰り返し
-学んできた「二枚持つと必ずずれる」を自ら踏むことになる。`Kagi` と `Genki` は
-表が小さく黄金ベクトルで完全に縛れるので写したが、格子探索と費用計算は性質が違ふ。
-
-筋は **Rust の核を静的ライブラリとして繋ぐ**ことである（web が wasm で
-さうしてゐるのと同じ形で、入出力は「文字列を入れて文字列を貰ふ」だけで足りる）。
-`aarch64-apple-darwin` / `aarch64-apple-ios` は cargo の標準ターゲットなので、
-道具立ても増えない。
+| **署名・公証** | **未署名。** 手元の検証は通るが、配るには Developer ID 署名と `notarytool` が要る（Mac App Store は Sandbox を要求し IMKit と相性が悪いので、経路は直配布の DMG/PKG） |
+| 表示属性の作り込み | 注目文節の引き分けまで。共感覚（情調 → 伝統色）は未着手 |
+| 縦書きの候補列 | 横に並べるだけ。Core Text の縦組は交換可能な部品として後回し |
+| **本人の手元での常用** | **未確認。** 組めて入るところまでは機械で確かめたが、入力方式は有効化とログインし直しが要るので、実際に打つのは本人の手による |
