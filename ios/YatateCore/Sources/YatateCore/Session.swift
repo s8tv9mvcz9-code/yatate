@@ -1,11 +1,13 @@
-// 入力セッション — **どの OS でも同じ**打鍵の状態機械（core/src/session.rs の写し）。
+// 入力セッション — **どの OS でも同じ**打鍵の状態機械（core/src/session.rs）。
 //
 // 殻はここへ打鍵を渡し、返つてきた指示のとほりに未確定文字列を描き、
 // 確定時に文字列を挿し込むだけでよい。TSF の composition も IMKit の marked text も
 // Android の composing text も、**呼び名が違ふだけで同じもの**である。
 //
-// SSOT は Rust の core/src/session.rs。ここはその写しで、
-// ParityTests が core/vectors/genki.json で両者を縛る。
+// 変換（Space で漢字へ）まで要るなら [`Henkan`] を使ふ。ここは仮名だけの道で、
+// 二行配列（硝子）のやうに変換を持たない場面のための細い口である。
+
+import YatateFFI
 
 /// 一打に対する殻への指示。
 public enum KeyAction: Equatable, Sendable {
@@ -20,72 +22,67 @@ public enum KeyAction: Equatable, Sendable {
 }
 
 /// 未確定文字列を抱へる入力セッション。入力欄ごとに 1 つ持つ。
-public struct Session: Sendable {
-    private var genki = Genki()
-    private var composer = Composer()
+///
+/// 核の状態を握るので参照型である（値型にすると写した瞬間に状態が分裂する）。
+public final class Session {
+    private let handle = yatate_session_new()
 
     public init() {}
 
-    /// いま未確定の仮名列。
-    public var preedit: String { composer.text }
+    deinit { yatate_session_free(handle) }
 
-    public var isComposing: Bool { !composer.isEmpty }
+    /// いま未確定の仮名列。
+    public var preedit: String { coreText(yatate_session_preedit(handle)) }
+
+    public var isComposing: Bool { yatate_session_is_composing(handle) != 0 }
 
     /// 前置シフトが立つてゐるか（殻が面の表示を替へる手掛かり）。
-    public var isShifted: Bool { genki.shifted }
+    public var isShifted: Bool { yatate_session_is_shifted(handle) != 0 }
 
     /// 墨の氣配 — 次の一打の分布。候補窓・鍵盤表示に使ふ（描くのは殻）。
-    public var field: ActionField { Kehai.field(after: composer.text.last) }
+    public var field: ActionField { Kehai.parse(coreText(yatate_session_kehai(handle))) }
 
     /// 原器の一打を食はせる。
-    public mutating func key(_ ch: Character) -> KeyAction {
-        let last = composer.text.last
-        switch genki.press(ch, last: last) {
-        case .insert(let kana):
-            composer.append(kana)
-            return .update
-        case .replaceLast(let c):
-            composer.deleteLast()
-            composer.append(String(c))
-            return .update
-        // 前置シフトを立てた打鍵は**呑む**（OS へ流すと `^` が入力されてしまふ）
-        case .none:
-            return .swallow
-        case .unmapped:
-            // 矢立の鍵でない。未確定文字列を抱へてゐる間は取り零さぬやう呑み、
-            // 何も無ければ素通しして OS 本来の働きを妨げない。
-            return isComposing ? .swallow : .passthrough
-        }
+    public func key(_ ch: Character) -> KeyAction {
+        action(yatate_session_key(handle, coreScalar(ch)))
+    }
+
+    /// 仮名を**直に**積む（硝子の鍵盤用。二行配列は原器の写像を経ない）。
+    @discardableResult
+    public func insertKana(_ kana: String) -> KeyAction {
+        action(kana.withCore { yatate_session_insert_kana(handle, $0) })
     }
 
     /// この鍵を矢立が受け取るべきか（IMKit の `handle` が先に判断する）。
     ///
     /// 未確定文字列がある間は、原器に無い鍵も**一旦は受ける**
-    /// （確定・取り消しの機会を殻に残すため）。
+    /// （確定・取り消しの機会を殻に残すため）。**副作用は無い。**
     public func wantsKey(_ ch: Character) -> Bool {
-        if isComposing || genki.shifted { return true }
-        if ch == GenkiKey.shift || ch == GenkiKey.dakuten || ch == GenkiKey.handakuten {
-            return true
-        }
-        return firstPlane.contains { $0.0 == ch }
+        yatate_session_wants_key(handle, coreScalar(ch)) != 0
     }
 
     /// 一字消す。未確定文字列が空になつたら `false`（殻は marked text を閉ぢる）。
     @discardableResult
-    public mutating func backspace() -> Bool {
-        composer.deleteLast()
-        return isComposing
+    public func backspace() -> Bool {
+        yatate_session_backspace(handle) != 0
     }
 
     /// 確定 — **旧字体は核が機械で確定させる**。
-    public mutating func commit() -> KeyAction {
-        genki.reset()
-        return .commit(composer.commit())
+    public func commit() -> KeyAction {
+        action(yatate_session_commit(handle))
     }
 
     /// 取り消し（Esc）。未確定文字列を捨てる。
-    public mutating func cancel() {
-        genki.reset()
-        composer = Composer()
+    public func cancel() {
+        yatate_session_cancel(handle)
+    }
+
+    private func action(_ code: Int32) -> KeyAction {
+        switch code {
+        case YATATE_ACT_UPDATE: return .update
+        case YATATE_ACT_SWALLOW: return .swallow
+        case YATATE_ACT_COMMIT: return .commit(coreText(yatate_session_take_commit(handle)))
+        default: return .passthrough
+        }
     }
 }

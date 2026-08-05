@@ -79,7 +79,7 @@ final class GenkiParityTests: XCTestCase {
 
     /// 前置シフトは**逐次打鍵**であり、一打だけ効く。
     func testPrefixShiftLastsOneKey() {
-        var g = Genki()
+        let g = Genki()
         XCTAssertEqual(g.press("^", last: nil), .none)
         XCTAssertTrue(g.shifted)
         XCTAssertEqual(g.press("0", last: nil), .insert("ま"))
@@ -149,7 +149,7 @@ final class KagiParityTests: XCTestCase {
             let fromHid = try XCTUnwrap(genki(hid: hid), "HID \(hid) から原器が引けない")
             XCTAssertEqual(fromMac, fromHid, "macOS と iOS が違ふ鍵を指してゐる")
 
-            var s = Session()
+            let s = Session()
             XCTAssertTrue(s.wantsKey(fromMac), "'\(fromMac)' を殻が受けない")
         }
     }
@@ -183,13 +183,29 @@ final class KagiParityTests: XCTestCase {
         XCTAssertEqual(typeKeys(":"), "さ")
     }
 
-    /// 機能キーを原器が食つてはいけない（HID の Enter・Space・Esc・Tab）。
+    /// **殻が機能キーとして使ふ位置が、原器と重ならないこと。**
+    ///
+    /// 重なれば「文節を移さうとしたら と が入る」といふ類の、
+    /// 例外も警告も出ない事故になる。Windows 殻が走査符号で同じことを縛つてゐるのと対。
+    ///
+    /// ここに並ぶのは macOS 殻（YatateInputController）と iOS の稽古場が
+    /// 実際に名前で持つてゐる位置そのものである。
     func testFunctionKeysAreNotGenki() {
-        for usage: UInt16 in [0x28, 0x2C, 0x29, 0x2B] {
+        // iOS（HID usage）— Enter・Space・Esc・Tab・BackSpace・矢印四方
+        let hidFunctionKeys: [UInt16] = [
+            0x28, 0x2C, 0x29, 0x2B, 0x2A,
+            0x4F, 0x50, 0x51, 0x52,
+        ]
+        for usage in hidFunctionKeys {
             XCTAssertNil(genki(hid: usage), "HID \(usage) を原器が食つてはいけない")
         }
-        // macOS: kVK_Return 0x24・kVK_Tab 0x30・kVK_Space 0x31・kVK_Escape 0x35
-        for code: UInt16 in [0x24, 0x30, 0x31, 0x35] {
+        // macOS（kVK）— Return 0x24・Tab 0x30・Space 0x31・Delete 0x33・Escape 0x35
+        //               KeypadEnter 0x4C・← 0x7B・→ 0x7C・↓ 0x7D・↑ 0x7E
+        let macFunctionKeys: [UInt16] = [
+            0x24, 0x30, 0x31, 0x33, 0x35, 0x4C,
+            0x7B, 0x7C, 0x7D, 0x7E,
+        ]
+        for code in macFunctionKeys {
             XCTAssertNil(genki(mac: code), "kVK \(code) を原器が食つてはいけない")
         }
     }
