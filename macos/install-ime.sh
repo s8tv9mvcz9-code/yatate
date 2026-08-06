@@ -19,6 +19,27 @@
 # 直配布の DMG/PKG になる（docs/ime/cross-platform.md §8）。
 set -euo pipefail
 
+# ## sudo で走らせてはいけない
+#
+# 入力方式は**ログインしてゐる本人の権限**で読まれる部品である。sudo で置くと
+# ~/Library/Input Methods/YatateIME.app が root 所有になり、セッションが登録できず
+# 一覧に出ない。しかも組み上げも設置も成功するので、**成功したやうに見えて出ない**。
+# 「入れたのに出ない」の残り一割はこれ（九割はログインし直し忘れ）。実際に踏んだ。
+if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+  cat >&2 <<'MSG'
+✗ sudo で走らせないこと。
+
+  入力方式は本人の権限で読まれるため、root で置くと登録されない
+  （組み上げも設置も成功するのに一覧に出ない、といふ形で失敗する）。
+
+  既に sudo で入れてしまつた場合は、先に消してから入れ直す:
+
+      sudo rm -rf ~/Library/Input\ Methods/YatateIME.app
+      ./macos/install-ime.sh          # ← sudo を付けない
+MSG
+  exit 1
+fi
+
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
 DEST="$HOME/Library/Input Methods"
@@ -47,8 +68,25 @@ APP="$BUILD/Build/Products/Release/YatateIME.app"
 pkill -x YatateIME 2>/dev/null || true
 
 mkdir -p "$DEST"
-rm -rf "$DEST/YatateIME.app"
+# 以前 sudo で入れてゐると root 所有で消せない。黙つて古い版が residue として
+# 残ると、また「入れたのに出ない」に戻るので、ここで手を止めて理由を告げる。
+if [[ -e "$DEST/YatateIME.app" ]] && ! rm -rf "$DEST/YatateIME.app" 2>/dev/null; then
+  cat >&2 <<MSG
+✗ 既にある $DEST/YatateIME.app を消せない（恐らく sudo で入れた root 所有の版）。
+
+  一度だけ消してから、sudo を付けずに入れ直すこと:
+
+      sudo rm -rf ~/Library/Input\\ Methods/YatateIME.app
+      ./macos/install-ime.sh
+MSG
+  exit 1
+fi
 cp -R "$APP" "$DEST/"
+
+# IMKit の殻は初回起動時に自分を入力方式として名乗る。置いただけでも
+# ログイン時の走査で拾はれるが、ここで一度立ち上げておくと登録が確実になる
+# （LSBackgroundOnly なので画面には何も出ない）。
+open "$DEST/YatateIME.app" 2>/dev/null || true
 
 echo "▸ 置いた: $DEST/YatateIME.app"
 echo
