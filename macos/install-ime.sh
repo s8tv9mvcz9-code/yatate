@@ -82,11 +82,35 @@ MSG
   exit 1
 fi
 cp -R "$APP" "$DEST/"
+IMEAPP="$DEST/YatateIME.app"
+
+# ── 表示名の入れ物 ──────────────────────────────────
+# 入力ソースの名前は Resources/<lang>.lproj/InfoPlist.strings から引かれる。
+# CODE_SIGNING_ALLOWED=NO の素の組み上げには Resources が一つも入らないため、
+# ここで補ふ。鍵は入力モードの ID（ComponentInputModeDict の tsInputModeListKey）。
+for L in en ja; do
+  mkdir -p "$IMEAPP/Contents/Resources/$L.lproj"
+  cat > "$IMEAPP/Contents/Resources/$L.lproj/InfoPlist.strings" <<'STRINGS'
+"CFBundleName" = "矢立";
+"CFBundleDisplayName" = "矢立（文語 IME）";
+"jp.yatate.inputmethod.Japanese" = "矢立（文語 IME）";
+STRINGS
+done
+
+# ── 束に封をする ────────────────────────────────────
+# xcodebuild の CODE_SIGNING_ALLOWED=NO では、実行ファイルに linker が付ける
+# ad-hoc 署名しか無く `_CodeSignature` が作られない。この状態の束は
+#   codesign --verify → "code has no resources but signature indicates they must be present"
+# となり、**署名の妥当でない入力方式は OS が読み込まない**。束ごと ad-hoc で
+# 署名し直して封をする（配布には Developer ID 署名と公証が別途要る）。
+codesign --force --deep --sign - "$IMEAPP" 2>/dev/null
+codesign --verify --deep --strict "$IMEAPP" 2>/dev/null \
+  || { echo "✗ 署名の検証に通らない。この束は OS に読み込まれない" >&2; exit 1; }
 
 # IMKit の殻は初回起動時に自分を入力方式として名乗る。置いただけでも
 # ログイン時の走査で拾はれるが、ここで一度立ち上げておくと登録が確実になる
 # （LSBackgroundOnly なので画面には何も出ない）。
-open "$DEST/YatateIME.app" 2>/dev/null || true
+open "$IMEAPP" 2>/dev/null || true
 
 echo "▸ 置いた: $DEST/YatateIME.app"
 echo
